@@ -5,7 +5,6 @@ from Model import Model
 from util import *
 import sys
 
-
 """
 Returns:
 	numpy array -- time series of quarterly Terra Alliance GMV
@@ -19,7 +18,6 @@ def alliance_gmv_series_plot(base, bear, bull):
 	plt.plot(t, bull, "tab:green", label="bull")	
 	plt.title("Alliance GMV (annualized)")
 	plt.show()
-
 
 def generate_alliance_gmv_series(genesis_gmv, growth_rates):
 	gmv_series = [genesis_gmv]
@@ -40,46 +38,10 @@ def alliance_gmv_scenarios():
 	bull = generate_alliance_gmv_series(base_genesis_gmv*1.3, scale_growth_rates(base_growth_rates, 1.3))
 	return {"base": base, "bear": bear, "bull": bull}
 
-
 def fiat_reserve_ratio_series():
 	reserve_ratios_quarterly = [1,0.95,0.9,0.8] + [0.6,0.5,0.4,0.3] + [0.2,0.17,0.14,0.12] + [0.1,0.09,0.085,0.08] + [0.075,0.071,0.068,0.066] + [0.065,0.061,0.058,0.056] + [0.055,0.053,0.052,0.051] + [0.05]*12
 	reserve_ratios_monthly = stretch_linear(reserve_ratios_quarterly, 3) + 2*[0.05] # last 2 months
 	return reserve_ratios_monthly
-
-def simulate():
-# take args: gmv series
-# initialize genesis state
-# apply state transition fuction to previous state
-# store list of past states
-	gmv_series = alliance_gmv_series()
-	target_reserve_ratio_series = fiat_reserve_ratio_series()
-	target_discount_series = [0.075]*6 + [0.05]*12 + [0.04]*12 + [0.03]*12 + [0.02]*30 + [0.01]*48
-	print(gmv_series)
-	print(target_reserve_ratio_series)
-	print(target_discount_series)
-	args = list(zip(gmv_series, target_reserve_ratio_series, target_discount_series))
-
-	pre_genesis_state = State(cash = ICO_FUNDS)
-	state_history = []
-	for m in range(NUM_MONTHS):
-		prev_state = state_history[m-1] if m > 0 else pre_genesis_state
-		state_history.append(prev_state.transition(*args[m]))
-
-	t = np.linspace(0, 119, 120)
-
-	plt.figure()
-	plt.plot(t, [s.alliance_gmv for s in state_history])
-	plt.title("Alliance GMV (annualized)")
-	plt.figure()
-	plt.plot(t, [s.volume_penetration for s in state_history])
-	plt.title("Volume Penetration")
-	plt.figure()
-	plt.plot(t, [s.nominal_volume for s in state_history])
-	plt.title("Nominal Volume (annualized)")
-	plt.show()
-
-	return -1
-
 
 def build_model_args(scenario):
 	gmv_scenarios = alliance_gmv_scenarios()
@@ -105,7 +67,6 @@ def plot_scenarios(m_base, m_bear, m_bull, attribute_args):
 		leg = plt.legend(loc='best')
 		leg.get_frame().set_alpha(0.5)
 		plt.show()
-
 
 if __name__ == '__main__':
 	bull_model_args = build_model_args("bull")
