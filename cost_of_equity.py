@@ -22,7 +22,7 @@ We apply standard practice of 5-year monthly log returns data in our beta analys
 All price data has been converted to USD at the appropriate historical rate.
 """
 
-RISK_FREE_RATE = 0.02 # 3-month US Treasury
+RISK_FREE_RATE = 0.0214 # 3-month US Treasury
 MARKET_RISK_PREMIUM = 0.055 # https://assets.kpmg.com/content/dam/kpmg/nl/pdf/2018/advisory/equity-market-risk-premium-research-summary.pdf
 
 def prices(path, attr, reverse=False):
@@ -85,7 +85,7 @@ if __name__ == "__main__":
 	print("Gold: {}".format(correlation(SP,GLD)))
 	print("BTC: {}".format(correlation(SP,BTC)))
 	print()
-	vol_projection = (2*annualized_vol(BTC) + annualized_vol(GMO))/3
+	vol_projection = (annualized_vol(BTC) + annualized_vol(GMO))/2
 	corr_projection = (correlation(SP,BTC) + correlation(SP,V))/2
 	beta_projection = corr_projection*vol_projection/annualized_vol(SP)
 	cost_of_equity = RISK_FREE_RATE + beta_projection*MARKET_RISK_PREMIUM
