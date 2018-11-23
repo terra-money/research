@@ -44,50 +44,32 @@ class Model:
 	"""
 	def __init__(self,
 				alliance_gmvs,
+				base_volume_penetration_series,
 				target_reserve_ratios,
-				target_discounts,
-				user_penetration_range):
+				target_discounts):
 		self.state = State(cash = GENESIS_CASH)
 		self.state_history = [] # don't include genesis state
 		self.alliance_gmvs = np.array(alliance_gmvs)/12 # convert to monthly
+		self.base_volume_penetration_series = base_volume_penetration_series
 		self.target_reserve_ratios = target_reserve_ratios
 		self.target_discounts = target_discounts
-		self.user_penetration_range = user_penetration_range
 
 	def _alliance_user_model(self, alliance_gmv):
 		return alliance_gmv*12/GMV_USER_YEAR
 
-	def _user_penetration_model(self, month, user_penetration_range):
-		p_min, p_max = user_penetration_range
-		return p_min + sigmoid(month, 30, 0.4/3, p_max - p_min)
-
-	def _base_user_volume_capture(self, month):
-		l = np.linspace(0, 75, 120)/100
-		g = arange_geom(0, 75, 120)/100
-		v = (l+g)/2
-		return v[month]
-
-	def _discount_to_volume_capture(self, discount):
+	def _promotion_capture(self, discount):
 		components = [arange_geom(0,50,21),arange_geom(50,52.5,11,inverted=True)[1:],arange_geom(52.5,75,21)[1:],
 					  arange_geom(75,80,21,inverted=True)[1:],arange_geom(80,90,31)[1:]]
 		y = np.concatenate(components)/100
 		idx = int(discount*1000)
-		return y[idx]
+		return y[idx]/2
 
-	"""
-	Fraction of our users' volume we are able to capture.
-	Depends on two variables: month and discount
-	Month informs base volume capture, bvc
-	Discount informs discount volume capture for *non-base* volume, dvc
-	"""
-	def _user_volume_capture_model(self, month, discount):
-		bvc = self._base_user_volume_capture(month)
-		dvc = self._discount_to_volume_capture(discount)
-		return bvc + (1-bvc)*dvc
+	def _promotion_capture_weight(self, month):
+		return sigmoid(month, 40, 0.1, 1)
 
+	def _volume_penetration_model(self, month, bvp, discount):
+		return bvp + (1 - bvp)*self._promotion_capture(discount)*self._promotion_capture_weight(month)
 
-	def _volume_penetration_model(self, month, user_penetration, discount):
-		return user_penetration*self._user_volume_capture_model(month, discount)
 
 	"""
 	Store of value ratio -- linearly grows between 0.1 and 0.4 over 10 years
@@ -95,8 +77,8 @@ class Model:
 	as savings deposits and MMFs)
 	"""
 	def _hodl_ratio_model(self, month):
-		l = np.linspace(0, 40, 120)/100
-		g = arange_geom(0, 40, 120)/100
+		l = np.linspace(0, 44.5, 120)/100
+		g = arange_geom(0, 44.5, 120)/100
 		h = (l+g)/2
 		return h[month]
 
@@ -105,9 +87,9 @@ class Model:
 	"""
 	def _transition(self,
 					next_alliance_gmv,
+					next_base_volume_penetration,
 					next_target_reserve_ratio,
-					next_target_discount,
-					user_penetration_range):
+					next_target_discount):
 		current = self.state # current State
 		next = State()
 		next.month = current.month + 1
@@ -116,8 +98,8 @@ class Model:
 		# users and volume
 		next.alliance_gmv = next_alliance_gmv
 		next.alliance_users = self._alliance_user_model(next.alliance_gmv)
-		next.user_penetration = self._user_penetration_model(next.month, user_penetration_range)
-		next.volume_penetration = self._volume_penetration_model(next.month, next.user_penetration, next_target_discount)
+		next.base_volume_penetration = next_base_volume_penetration
+		next.volume_penetration = self._volume_penetration_model(next.month, next.base_volume_penetration, next_target_discount)
 		next.nominal_volume = next.volume_penetration*next.alliance_gmv
  
 		# fees
@@ -157,9 +139,9 @@ class Model:
 
 
 	def run(self):
-		args = zip(self.alliance_gmvs, self.target_reserve_ratios, self.target_discounts, [self.user_penetration_range]*NUM_MONTHS)
+		args = zip(self.alliance_gmvs, self.base_volume_penetration_series, self.target_reserve_ratios, self.target_discounts)
 		for arg in args:
-			time.sleep(0.01)
+			time.sleep(0.005)
 			self._transition(*arg)
 			print(self.state)
 
