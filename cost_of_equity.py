@@ -85,7 +85,7 @@ if __name__ == "__main__":
 	print("Gold: {}".format(correlation(SP,GLD)))
 	print("BTC: {}".format(correlation(SP,BTC)))
 	print()
-	vol_projection = (annualized_vol(BTC) + annualized_vol(GMO))/2
+	vol_projection = (annualized_vol(BTC) + (annualized_vol(GMO) + annualized_vol(KGI))/2)/2
 	corr_projection = (correlation(SP,BTC) + correlation(SP,V))/2
 	beta_projection = corr_projection*vol_projection/annualized_vol(SP)
 	cost_of_equity = RISK_FREE_RATE + beta_projection*MARKET_RISK_PREMIUM
