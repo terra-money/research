@@ -179,11 +179,24 @@ class Model:
 		plt.title(attribute + (" (annualized)" if annualize else ""))
 		plt.show()
 
+	"""
+	The option to annualize simply multiplies all values by 12 (useful for GMV for instance)
+	"""
 	def timeseries(self, attribute, annualize=False):
 		assert len(self.state_history) == NUM_MONTHS
 		a = np.array([getattr(s, attribute) for s in self.state_history])
 		if annualize:
 			a *= 12
 		return a
+
+	"""
+	Timeseries accumulated annually: returns 12 values (instead of 120)
+	"""
+	def timeseries_annual(self, attribute):
+		timeseries = self.timeseries(attribute, False)
+		result = []
+		for i in range(10):
+			result.append(sum(timeseries[12*i:12*(i+1)]))
+		return result
 
 
