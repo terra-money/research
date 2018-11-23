@@ -56,3 +56,11 @@ def arange_geom(a, b, k, inverted=False):
 """
 def scale_growth_rates(growth_rates, scale_factor):
 	return [1 + (r-1)*scale_factor for r in growth_rates]
+
+"""
+We need a model that takes in a CAGR and a decay parameter
+and returns a list of growth rates.
+"""
+
+
+
