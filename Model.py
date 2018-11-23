@@ -13,6 +13,7 @@ GENESIS_CASH = 100
 FIAT_TO_TERRA_FEE = 0.01 # fraction
 NUM_MONTHS = 120
 GMV_USER_YEAR = 4*10**(-4) # average GMV per user per year -- $400 in $mm
+DISCOUNT_RATE = 1.22
 
 """
 The goal is to make all independent variables explicit:
@@ -172,14 +173,14 @@ class Model:
 
 	def _terminal_value(self):
 		last_fcff = [s.free_cash_flow + s.dividends for s in self.state_history][-1]
-		term_growth_rate = 0.05
-		term_discount_rate = 0.15
+		term_growth_rate = 0.03
+		term_discount_rate = 0.09
 		term_value_undiscounted = last_fcff*12*(1 + term_growth_rate)/(term_discount_rate - term_growth_rate)
-		term_value_discounted = term_value_undiscounted/(1.25**10)
+		term_value_discounted = term_value_undiscounted/(DISCOUNT_RATE**10)
 		return term_value_discounted
 
 	def _discount_rate(self):
-		annual_rate = 1.25
+		annual_rate = DISCOUNT_RATE
 		monthly_rate = math.pow(annual_rate, 1/12)
 		return monthly_rate
 
