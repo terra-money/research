@@ -19,7 +19,7 @@ class State:
 				month = -1,
 				alliance_gmv = 0,
 				alliance_users = 0,
-				user_penetration = 0,
+				base_volume_penetration = 0,
 				volume_penetration = 0,
 				nominal_volume = 0,
 				real_volume = 0,
@@ -38,7 +38,7 @@ class State:
 		self.month = month
 		self.alliance_gmv = alliance_gmv
 		self.alliance_users = alliance_users
-		self.user_penetration = user_penetration
+		self.base_volume_penetration = base_volume_penetration
 		self.volume_penetration = volume_penetration
 		self.nominal_volume = nominal_volume
 		self.real_volume = real_volume
@@ -55,7 +55,7 @@ class State:
 		self.cash = cash
 
 	def __str__(self):
-		return "month {:2} \tUP {:3.0%} VP {:3.0%} \t\tdiscount {:5.2%} \t\tFCFF {:5,.0f} DIV {:4,.0f} cash {:6,.0f} \tRR {:4.0%} TRR {:4.0%}".format(self.month, self.user_penetration, self.volume_penetration, self.discount, self.free_cash_flow, self.dividends, self.cash, self.reserve_ratio, self.target_reserve_ratio)
+		return "month {:2} \tAGMV {:6,.0f} \tBVP {:3.0%} VP {:3.0%} \t\tdiscount {:5.2%} \t\tFCFF {:5,.0f} DIV {:4,.0f} cash {:6,.0f} \tRR {:4.0%} TRR {:4.0%}".format(self.month, self.alliance_gmv, self.base_volume_penetration, self.volume_penetration, self.discount, self.free_cash_flow, self.dividends, self.cash, self.reserve_ratio, self.target_reserve_ratio)
 
 
 
