@@ -85,7 +85,19 @@ if __name__ == "__main__":
 	print(df)
 
 	ax = df.loc[:, ['TV1', 'TV2', 'TV3']].plot()
+	ax.set_xlabel('time (months)')
+	ax.set_ylabel('Transaction Volume ($ mm)')
+	ax.set_xlim(0, 20)
+
 	ax = df.loc[:, ['w1', 'w2', 'w3']].plot(kind='area',title='λ={}'.format(LAMBDA))
+	ax.set_xlabel('time (months)')
+	ax.set_ylabel('Funding Weight')
+	ax.set_xlim(0, 20)
+
 	ax = df.loc[:, ['w1', 'w2', 'w3']].plot(kind='area', stacked=False, title='λ={}'.format(LAMBDA))
+	ax.set_xlabel('time (months)')
+	ax.set_ylabel('Funding Weight')
+	ax.set_xlim(0, 20)
+
 	plt.show()
 
