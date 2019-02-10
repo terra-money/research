@@ -89,6 +89,11 @@ if __name__ == "__main__":
 	ax.set_ylabel('Transaction Volume ($ mm)')
 	ax.set_xlim(0, 20)
 
+	ax = df.loc[:, ['SM1', 'SM2', 'SM3']].plot(logy=True,title='λ={}'.format(LAMBDA)) # note that the SMs depend on λ
+	ax.set_xlabel('time (months)')
+	ax.set_ylabel('Spending Multiplier (log)')
+	ax.set_xlim(0, 20)
+
 	ax = df.loc[:, ['w1', 'w2', 'w3']].plot(kind='area',title='λ={}'.format(LAMBDA))
 	ax.set_xlabel('time (months)')
 	ax.set_ylabel('Funding Weight')
