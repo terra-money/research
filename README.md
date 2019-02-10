@@ -1,5 +1,5 @@
 # Terra Research
-
+Codebase for Terra Research. Projects span all layers of the Terra stack: blockchain, stability, dApps, e-commerce and beyond.
 ## Requirements
 * Python 3.6 or above
 * Basic python packages found in requirements.txt (numpy, pandas etc)
@@ -13,13 +13,20 @@ pip install -r requirements.txt
 ```
 You're all set!
 
-# Projects
-The codebase is organized around projects which are mostly independent at the code-level.
+## Projects
+The codebase is organized around projects which are mostly independent code-wise. Projects are defined at the implementation level: two projects may be implementing different solutions to the same research problem, eg the mining rewards problem. Each project has its own directory. Project-wide code will be demarcated into separate directories.
+
+### Project Directory
+
+| Project       | Description   |
+| ------------- | ------------- |
+| Content Cell  | Content Cell  |
+| Content Cell  | Content Cell  |
 ```
 python simulation.py
 ```
 
-# estimate cost of equity for Luna
+#### estimate cost of equity for Luna
 ```
 python cost_of_equity.py
 ```
