@@ -11,20 +11,6 @@ from dateutil.relativedelta import relativedelta
 
 START_DATE = datetime.date(2019,1,1)
 
-"""
-Returns:
-	numpy array -- time series of quarterly Terra Alliance GMV
-"""
-def alliance_gmv_series_plot(base, bear, bull):
-	t = np.linspace(0, 119, 120)
-
-	plt.figure()
-	plt.plot(t, base, "tab:blue", label="base")
-	plt.plot(t, bear, "tab:red", label="bear")
-	plt.plot(t, bull, "tab:green", label="bull")	
-	plt.title("Alliance GMV (annualized)")
-	plt.show()
-
 def generate_alliance_gmv_series(genesis_gmv, growth_rates):
 	gmv_series = [genesis_gmv]
 	for r in growth_rates:
@@ -77,55 +63,89 @@ def build_model_args(scenario):
 	target_discounts = target_discount_series()
 	return (gmv_scenarios[scenario], bvp_scenarios[scenario], fiat_reserve_ratios, target_discounts)
 
-def plot_scenarios(m_base, m_bear, m_bull, attribute_args):
-	for arg in attribute_args:
-		attribute, y_type, annualize = arg
+"""
+Args:
+	timeseries_list: a list of timeseries
+	y_type: one of "%" or "$", describes all timeseries
 
-		t = np.linspace(0, 119, 120)
-		base_timeseries = m_base.timeseries(attribute, annualize)
-		bear_timeseries = m_bear.timeseries(attribute, annualize)
-		bull_timeseries = m_bull.timeseries(attribute, annualize)
-
-		t_dates = [START_DATE + relativedelta(months=m) for m in t]
-		years = mdates.YearLocator()   # every year
-		yearsFmt = mdates.DateFormatter('%Y')
-		fig, ax = plt.subplots()
-
-		# type-specific formatting:
+	Timeseries of type "%" are provided as fractions, eg 0.1 for 10%
+	Timeseries of type "$" are provided in $mm
+"""
+def preprocess_timeseries(timeseries_list, y_type):
+	for ts in timeseries_list:
 		if y_type == "%":
-			bull_timeseries *= 100
-			base_timeseries *= 100
-			bear_timeseries *= 100
-			ax.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+			ts *= 100
 		elif y_type == "$":
-			# convert from $mm to $B
-			bull_timeseries /= 1000
-			base_timeseries /= 1000
-			bear_timeseries /= 1000
-			plt.ylabel("$B")
+			ts /= 1000 # convert from $mm to $B
 		else:
-			raise RuntimeError("unrecognized y_type")
+			raise RuntimeError("unrecognized y_type: {}".format(y_type))
 
-		ax.plot(t_dates, bull_timeseries, "tab:green", label="bull")
-		ax.plot(t_dates, base_timeseries, "tab:blue", label="base")
-		ax.plot(t_dates, bear_timeseries, "tab:red", label="bear")
+"""
+Generic facility for custom plots of multiple timeseries
 
-		# format the ticks
-		ax.xaxis.set_major_locator(years)
-		ax.xaxis.set_major_formatter(yearsFmt)
+Args:
+	timeseries_args: List of timeseries argument tuples, to be described below
+	y_type: one of "%" or "$", describes all timeseries
+	title: string to be used as title of the plot
 
-		# round to nearest years...
-		datemin = np.datetime64(t_dates[0], 'Y')
-		datemax = np.datetime64(t_dates[-1], 'Y') + np.timedelta64(1, 'Y')
-		ax.set_xlim(datemin, datemax)
-		# rotates and right aligns the x labels, and moves the bottom of the
-		# axes up to make room for them
-		fig.autofmt_xdate()
+	A timeseries argument is a tuple of the form (ts, label, color):
+		ts is a timeseries of type y_type and length 120
+		label is the string to be used in the legend for this timeseries, eg "Dividends"
+		color is the string used for coloring the plot, eg "red"
 
-		plt.title(attribute + (" (annualized)" if annualize else ""))
-		leg = plt.legend(loc='best')
-		leg.get_frame().set_alpha(0.5)
-		plt.show()
+		Timeseries of type "%" are provided as fractions, eg 0.1 for 10%
+		Timeseries of type "$" are provided in $mm
+"""
+def plot_many(timeseries_args, y_type, title):
+	# boilerplate plot setup...
+	t = np.linspace(0, 119, 120)
+	t_dates = [START_DATE + relativedelta(months=m) for m in t]
+	years = mdates.YearLocator()   # every year
+	yearsFmt = mdates.DateFormatter('%Y')
+	fig, ax = plt.subplots()
+	# format the ticks
+	ax.xaxis.set_major_locator(years)
+	ax.xaxis.set_major_formatter(yearsFmt)
+	# round to nearest years...
+	datemin = np.datetime64(t_dates[0], 'Y')
+	datemax = np.datetime64(t_dates[-1], 'Y') + np.timedelta64(1, 'Y')
+	ax.set_xlim(datemin, datemax)
+	# rotates and right aligns the x labels, and moves the bottom of the
+	# axes up to make room for them
+	fig.autofmt_xdate()
+
+	# type-specific formatting:
+	if y_type == "%":
+		ax.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+	elif y_type == "$":
+		plt.ylabel("$B")
+
+	preprocess_timeseries(list(zip(*timeseries_args))[0], y_type)
+
+	for ts_arg in timeseries_args:
+		ts = ts_arg[0]
+		label = ts_arg[1]
+		color = ts_arg[2]
+		ax.plot(t_dates, ts, "tab:{}".format(color), label=label)
+
+	plt.title(title)
+	leg = plt.legend(loc='best')
+	leg.get_frame().set_alpha(0.5)
+	plt.show()
+
+"""
+
+"""
+def plot_scenarios(models, attribute, y_type, annualize):
+	bull_ts = models["bull"].timeseries(attribute, annualize)
+	base_ts = models["base"].timeseries(attribute, annualize)
+	bear_ts = models["bear"].timeseries(attribute, annualize)
+
+	timeseries_args = [(bull_ts, "bull", "green"), (base_ts, "base", "blue"), (bear_ts, "bear", "red")]
+	title = attribute + (" (annualized)" if annualize else "")
+	plot_many(timeseries_args, y_type, title)
+
+
 
 if __name__ == '__main__':
 	bull_model_args = build_model_args("bull")
@@ -144,22 +164,17 @@ if __name__ == '__main__':
 	print("Base Temperature: {:6,.0f} mm celsius".format(m_base.valuation()))
 	print("Bear Temperature: {:6,.0f} mm celsius".format(m_bear.valuation()))
 
-	attribute_args = [("base_volume_penetration", "%", False),
-					  ("volume_penetration", "%", False),
-					  ("alliance_gmv", "$", True),
-					  ("nominal_volume", "$", True),
-					  ("discount", "%", False),
-					  ("free_cash_flow", "$", False),
-					  ("seigniorage", "$", False),
-					  ("reserve_ratio", "%", False)]
+	models = {"bull": m_bull, "base": m_base, "bear": m_bear}
+	plot_scenarios(models, "base_volume_penetration", "%", False)
 
-	print("\nAnnual Dividends")
-	print(m_bull.timeseries_annual("dividends"))
-	print(m_base.timeseries_annual("dividends"))
-	print(m_bear.timeseries_annual("dividends"))
-	print("\nCumulative FCFF")
-	print(m_bull.timeseries_annual("free_cash_flow"))
-	print(m_base.timeseries_annual("free_cash_flow"))
-	print(m_bear.timeseries_annual("free_cash_flow"))
-	#plot_scenarios(m_base, m_bear, m_bull, attribute_args)
+	# attribute_args = [("base_volume_penetration", "%", False),
+	# 				  ("volume_penetration", "%", False),
+	# 				  ("alliance_gmv", "$", True),
+	# 				  ("nominal_volume", "$", True),
+	# 				  ("discount", "%", False),
+	# 				  ("free_cash_flow", "$", False),
+	# 				  ("seigniorage", "$", False),
+	# 				  ("reserve_ratio", "%", False)]
+
+
 
