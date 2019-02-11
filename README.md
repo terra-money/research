@@ -1,4 +1,4 @@
-# Terra Research
+# Research
 Codebase for Terra Research. Projects span all layers of the Terra stack: blockchain, stability, dApps, e-commerce and beyond.
 ## Requirements
 * Python 3.6 or above
@@ -18,10 +18,10 @@ The codebase is organized around projects which are mostly independent code-wise
 
 ### Project Directory
 
-| Project       | Description   |
-| ------------- | ------------- |
-| Content Cell  | Content Cell  |
-| Content Cell  | Content Cell  |
+| Project       | Description   | README        |
+| ------------- | ------------- |---------------|
+| Terra for e-commerce: Simulation and Valuation | TODO  | TODO          |
+| dApp Funding Weights                                   | TODO  | TODO          |
 ```
 python simulation.py
 ```
