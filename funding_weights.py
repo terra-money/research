@@ -13,6 +13,8 @@ python funding_weights.py 0.5
 
 Inputs
 Transaction Volume timeseries for each firm
+
+Parameters
 lambda
 
 Outputs
@@ -102,6 +104,7 @@ if __name__ == "__main__":
 		evaluate_state(df, t)
 
 	print(df)
+	df.to_csv('funding_weights_output_{}.csv'.format(LAMBDA), index=False)
 
 	ax = df.loc[:, ['TV1', 'TV2', 'TV3']].plot()
 	ax.set_xlabel('time (months)')
