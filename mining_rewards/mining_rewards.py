@@ -4,6 +4,12 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter
 import argparse
 
+# common hack to import from sibling directory utils
+# alternatives involve making all directories packages, creating setup files etc
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from utils.gbm import gbm
+
 """
 Our core objective in designing Terra's stability mechanism is to contain volatility in Luna price changes.
 
@@ -61,7 +67,7 @@ Outputs
 # t representing week (0 to 52*5-1): 10 years
 # TV
 # TMCAP
-# seigniorage?
+# seigniorage
 # LMCAP
 # L Supply
 # L price
@@ -77,7 +83,8 @@ Outputs
 # Luna P/E ratio (random walk in range 1 to 200?)
 
 V = 26 # annual Terra velocity
-TOTAL_DAYS = 10*364
+NUM_YEARS = 10
+TOTAL_DAYS = NUM_YEARS*364
 PERIOD = 7 # in days
 PERIODS_PER_YEAR = int(364/PERIOD)
 NUM_PERIODS = int(TOTAL_DAYS/PERIOD)
@@ -87,6 +94,10 @@ GENESIS_SEIGNIORAGE_WEIGHT = 0.1
 GENESIS_LUNA_SUPPLY = 100
 
 LUNA_PE = 50 # TODO TEMPORARY -- make stochastic
+
+# GBM parameters for TV
+MU = 0.34
+SIGMA = 0.3
 
 def plot_results(df):
 	# plot TV
@@ -135,6 +146,9 @@ def plot_results(df):
 
 	plt.show()
 
+def luna_earnings_multiple():
+	raise NotImplementedError()
+
 # Transaction Volume to Terra Money Supply
 def tv_to_m(tv):
 	annual_tv = tv*PERIODS_PER_YEAR
@@ -142,6 +156,7 @@ def tv_to_m(tv):
 
 # Mining Rewards to Luna Market Cap
 # TODO add randomness
+# TODO use MA rather than latest MR to smooth out
 def mr_to_lmc(mr):
 	annual_mr = mr*PERIODS_PER_YEAR
 	return annual_mr*LUNA_PE
@@ -191,24 +206,22 @@ def evaluate_state(df, t):
 		df.at[t+1,'f'] = df.at[t,'f']
 		df.at[t+1,'w'] = df.at[t,'w']
 
-# TODO do not forward-project at the last period
-
 # TODO how do we forward project TV? Do we need to?
 
 def identity_update(f,w):
-	return NotImplementedError()
+	raise NotImplementedError()
 
 def taylor_update(f, w):
-	return NotImplementedError()
+	raise NotImplementedError()
 
 def mac_update(f, w):
-	return NotImplementedError()
+	raise NotImplementedError()
 
 
 if __name__ == '__main__':
+	np.random.seed(0) # for consistent outputs while developing
 	t = range(0, NUM_PERIODS)
-	# TODO model tv as GBM
-	tv = np.logspace(0, 2, num=NUM_PERIODS, base=10) # exponential from 1 to 100
+	tv = gbm(1, MU, SIGMA, NUM_YEARS, PERIODS_PER_YEAR)
 
 	df = pd.DataFrame(data = {'t': t, 'TV': tv})
 	df['M'] = np.NaN # Terra Money Supply
@@ -229,6 +242,7 @@ if __name__ == '__main__':
 	# compute some extra columns
 	df['ΔM'] = df['M'] - df['M'].shift(1) # changes in M
 	df['LRR'] = df['LMC']/df['M'] # Luna Reserve Ratio
+	# TODO plot fee to seigniorage revenue ratio -- do we want to smooth this out?
 
 	print(df)
 
