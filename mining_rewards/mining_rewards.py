@@ -29,8 +29,8 @@ in supply in order to determine what share of each future rewards 1 Luna can cla
 We can formulate the price of 1 Luna today using DCF as follows:
 SUM for all t from now to infinity: Total Rewards(t)/Luna Supply(t)/(1+r)^t for an appropriate discount rate r.
 
-The main benefit of this formulation is that it captures the idea that "the market prices in future dilution".
-The market in fact ought to discount future rewards the more Luna Supply exceeds its target issuance.
+The main benefit of this formulation is that it captures the idea that "the market prices in future dilution",
+in the sense that given a projection of Luna Supply in the future they can soundly price 1 Luna today.
 
 Luna Price Volatility
 Volatility in Luna price comes from volatility in future unit rewards, i.e. Total Rewards(t)/Luna Supply(t).
@@ -89,6 +89,8 @@ PERIOD = 7 # in days
 PERIODS_PER_YEAR = int(364/PERIOD)
 NUM_PERIODS = int(TOTAL_DAYS/PERIOD)
 
+PERIODS_PER_WINDOW = 13 # 13-week windows, ie 1 fiscal quarter
+
 GENESIS_FEE = 0.1/100
 GENESIS_SEIGNIORAGE_WEIGHT = 0.1
 GENESIS_LUNA_SUPPLY = 100
@@ -101,12 +103,12 @@ SIGMA = 0.3
 
 def plot_results(df):
 	# plot TV
-	ax = df.loc[:, ['TV']].plot()
+	ax = df.loc[:, ['TV', 'TV_MA']].plot()
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Transaction Volume ($)')
 
 	# plot ΔΜ
-	ax = df.loc[:, ['ΔM']].plot()
+	ax = df.loc[:, ['ΔM', 'ΔM_MA']].plot()
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('ΔΜ ($)')
 
@@ -123,7 +125,7 @@ def plot_results(df):
 	ax.right_ax.set_yticklabels(['{:,.2%}'.format(y) for y in y_ticks_right])
 
 	# plot MR and MRL
-	ax = df.loc[:, ['MR', 'MRL']].plot(secondary_y=['MRL'])
+	ax = df.loc[:, ['MR_MA', 'MRL_MA']].plot(secondary_y=['MRL_MA'])
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Mining Rewards ($)')
 	ax.right_ax.set_ylabel('Mining Rewards per Luna ($)')
@@ -140,7 +142,7 @@ def plot_results(df):
 	ax.right_ax.set_ylabel('Luna Market Cap ($)')
 
 	# plot LRR
-	ax = df.loc[:, ['LRR']].plot()
+	ax = df.loc[:, ['LRR', 'LRR_MA']].plot()
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Luna Reserve Ratio')
 
@@ -157,9 +159,10 @@ def tv_to_m(tv):
 # Mining Rewards to Luna Market Cap
 # TODO add randomness
 # TODO use MA rather than latest MR to smooth out
-def mr_to_lmc(mr):
-	annual_mr = mr*PERIODS_PER_YEAR
-	return annual_mr*LUNA_PE
+def mr_to_lmc(df, t):
+	mr_ma = df['MR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean().at[t]
+	annualized_mr = mr_ma*PERIODS_PER_YEAR
+	return annualized_mr*LUNA_PE
 
 # nothing special going on here
 # separating to avoid lots of if-statements in state transition code
@@ -169,7 +172,7 @@ def set_genesis_state(df):
 	df.at[0,'f'] = GENESIS_FEE
 	df.at[0,'w'] = GENESIS_SEIGNIORAGE_WEIGHT
 	df.at[0,'MR'] = df.at[0,'f']*df.at[0,'TV'] # seigniorage not defined at genesis
-	df.at[0,'LMC'] = mr_to_lmc(df.at[0,'MR'])
+	df.at[0,'LMC'] = mr_to_lmc(df, 0)
 	df.at[0,'LS'] = GENESIS_LUNA_SUPPLY
 	df.at[0,'MRL'] = df.at[0,'MR']/df.at[0,'LS']
 	# f and w are forward-computed for the following state
@@ -191,7 +194,7 @@ def evaluate_state(df, t):
 	delta_m = df.at[t,'M'] - df.at[t-1,'M']
 	df.at[t,'S'] = max(delta_m, 0)
 	df.at[t,'MR'] = df.at[t,'f']*df.at[t,'TV'] + df.at[t,'w']*df.at[t,'S']
-	df.at[t,'LMC'] = mr_to_lmc(df.at[t,'MR'])
+	df.at[t,'LMC'] = mr_to_lmc(df, t)
 
 	if delta_m >= 0: # expansion
 		df.at[t,'LS'] = df.at[t-1,'LS']
@@ -206,7 +209,11 @@ def evaluate_state(df, t):
 		df.at[t+1,'f'] = df.at[t,'f']
 		df.at[t+1,'w'] = df.at[t,'w']
 
-# TODO how do we forward project TV? Do we need to?
+# TODO how do we forward project TV? Do we need to? probably not given we are using MAs
+# TODO enforce bounds on the magnitude of f and w changes per period (enforce on all
+# functions?)
+
+# where are MAs essential?
 
 def identity_update(f,w):
 	raise NotImplementedError()
@@ -214,9 +221,11 @@ def identity_update(f,w):
 def taylor_update(f, w):
 	raise NotImplementedError()
 
-def mac_update(f, w):
+def smooth_update(f, w):
 	raise NotImplementedError()
 
+def debt_update(f, w):
+	raise NotImplementedError()
 
 if __name__ == '__main__':
 	np.random.seed(0) # for consistent outputs while developing
@@ -240,9 +249,16 @@ if __name__ == '__main__':
 		evaluate_state(df, t)
 
 	# compute some extra columns
+
+	# TODO plot fee to seigniorage revenue ratio -- do we want to smooth this out?
 	df['ΔM'] = df['M'] - df['M'].shift(1) # changes in M
 	df['LRR'] = df['LMC']/df['M'] # Luna Reserve Ratio
-	# TODO plot fee to seigniorage revenue ratio -- do we want to smooth this out?
+
+	df['TV_MA'] = df['TV'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
+	df['MR_MA'] = df['MR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
+	df['MRL_MA'] = df['MRL'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
+	df['ΔM_MA'] = df['ΔM'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
+	df['LRR_MA'] = df['LRR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
 
 	print(df)
 
