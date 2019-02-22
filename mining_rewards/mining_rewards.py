@@ -95,7 +95,7 @@ GENESIS_FEE = 0.1/100
 GENESIS_SEIGNIORAGE_WEIGHT = 0.1
 GENESIS_LUNA_SUPPLY = 100
 
-LUNA_PE = 50 # TODO TEMPORARY -- make stochastic
+GENESIS_LPE = 30
 
 # GBM parameters for TV
 MU = 0.34
@@ -125,15 +125,21 @@ def plot_results(df):
 	ax.right_ax.set_yticklabels(['{:,.2%}'.format(y) for y in y_ticks_right])
 
 	# plot MR and MRL
-	ax = df.loc[:, ['MR_MA', 'MRL_MA']].plot(secondary_y=['MRL_MA'])
+	#ax = df.loc[:, ['MR_MA', 'MRL_MA']].plot(secondary_y=['MRL_MA'])
+	ax = df.loc[:, ['MR_MA1', 'MR_MA2']].plot()
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Mining Rewards ($)')
-	ax.right_ax.set_ylabel('Mining Rewards per Luna ($)')
+	#ax.right_ax.set_ylabel('Mining Rewards per Luna ($)')
 
 	# plot LS
 	ax = df.loc[:, ['LS']].plot()
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Luna Supply')
+
+	# plot LPE
+	ax = df.loc[:, ['LPE']].plot()
+	ax.set_xlabel('time (weeks)')
+	ax.set_ylabel('Luna PE Ratio')
 
 	# plot M and LMC
 	ax = df.loc[:, ['M', 'LMC']].plot(secondary_y=['LMC'])
@@ -148,8 +154,27 @@ def plot_results(df):
 
 	plt.show()
 
-def luna_earnings_multiple():
-	raise NotImplementedError()
+"""
+Stochastic P/E multiple for Luna at time t, LPE(t)
+Basic idea is to increase multiple during growth, decrease during recession
+We model LPE(t) as (1 + X(t))*LPE(t-1), where X(t) is N(μ, σ):
+μ is (MA1/MA2 - 1)/100, where MA1, MA2 are 1 and 2 year MAs for MR (earnings)
+σ is 0.5% if MA1 >= MA2, otherwise it is 1%
+Note that the updates are weekly, so eg 1% weekly vol is 7.2% annual vol
+
+LPE is basically a random walk whose next value depends on the trend in MR
+We make it more volatile when MR is in a downtrend
+"""
+# TODO may want to punish drops more by increasing negative mu's by 50-100%
+def lpe(df, t):
+	prev_lpe = df.at[t-1,'LPE']
+	mr_ma1 = df['MR'].rolling(PERIODS_PER_YEAR, min_periods=1).mean().at[t]
+	mr_ma2 = df['MR'].rolling(2*PERIODS_PER_YEAR, min_periods=1).mean().at[t]
+	mr_delta = mr_ma1/mr_ma2 - 1
+	mu = mr_delta/100
+	sigma = 0.005 if mr_ma1 >= mr_ma2 else 0.01
+	x = np.random.normal(mu, sigma)
+	return (1 + x)*prev_lpe
 
 # Transaction Volume to Terra Money Supply
 def tv_to_m(tv):
@@ -162,7 +187,8 @@ def tv_to_m(tv):
 def mr_to_lmc(df, t):
 	mr_ma = df['MR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean().at[t]
 	annualized_mr = mr_ma*PERIODS_PER_YEAR
-	return annualized_mr*LUNA_PE
+	lpe = df.at[t,'LPE']
+	return annualized_mr*lpe
 
 # nothing special going on here
 # separating to avoid lots of if-statements in state transition code
@@ -172,6 +198,7 @@ def set_genesis_state(df):
 	df.at[0,'f'] = GENESIS_FEE
 	df.at[0,'w'] = GENESIS_SEIGNIORAGE_WEIGHT
 	df.at[0,'MR'] = df.at[0,'f']*df.at[0,'TV'] # seigniorage not defined at genesis
+	df.at[0,'LPE'] = GENESIS_LPE
 	df.at[0,'LMC'] = mr_to_lmc(df, 0)
 	df.at[0,'LS'] = GENESIS_LUNA_SUPPLY
 	df.at[0,'MRL'] = df.at[0,'MR']/df.at[0,'LS']
@@ -194,6 +221,7 @@ def evaluate_state(df, t):
 	delta_m = df.at[t,'M'] - df.at[t-1,'M']
 	df.at[t,'S'] = max(delta_m, 0)
 	df.at[t,'MR'] = df.at[t,'f']*df.at[t,'TV'] + df.at[t,'w']*df.at[t,'S']
+	df.at[t,'LPE'] = lpe(df, t)
 	df.at[t,'LMC'] = mr_to_lmc(df, t)
 
 	if delta_m >= 0: # expansion
@@ -238,6 +266,7 @@ if __name__ == '__main__':
 	df['f'] = np.NaN # TX fee
 	df['w'] = np.NaN # seigniorage weight
 	df['MR'] = np.NaN # Mining Rewards
+	df['LPE'] = np.NaN # Luna PE ratio
 	df['LMC'] = np.NaN # Luna Market Cap
 	df['LS'] = np.NaN # Luna Supply
 	df['MRL'] = np.NaN # Mining Rewards per Luna
@@ -255,7 +284,8 @@ if __name__ == '__main__':
 	df['LRR'] = df['LMC']/df['M'] # Luna Reserve Ratio
 
 	df['TV_MA'] = df['TV'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
-	df['MR_MA'] = df['MR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
+	df['MR_MA1'] = df['MR'].rolling(52, min_periods=1).mean()
+	df['MR_MA2'] = df['MR'].rolling(104, min_periods=1).mean()
 	df['MRL_MA'] = df['MRL'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
 	df['ΔM_MA'] = df['ΔM'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
 	df['LRR_MA'] = df['LRR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
