@@ -152,6 +152,11 @@ def plot_results(df):
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Luna Reserve Ratio')
 
+	# plot FMR
+	ax = df.loc[:, ['FMR']].plot(kind='area')
+	ax.set_xlabel('time (weeks)')
+	ax.set_ylabel('Fee to Mining Reward Ratio')
+
 	plt.show()
 
 """
@@ -282,6 +287,10 @@ if __name__ == '__main__':
 	# TODO plot fee to seigniorage revenue ratio -- do we want to smooth this out?
 	df['ΔM'] = df['M'] - df['M'].shift(1) # changes in M
 	df['LRR'] = df['LMC']/df['M'] # Luna Reserve Ratio
+
+	rolling_fees = (df['f']*df['TV']).rolling(PERIODS_PER_WINDOW, min_periods=1).sum()
+	rolling_mr = df['MR'].rolling(PERIODS_PER_WINDOW, min_periods=1).sum()
+	df['FMR'] = rolling_fees/rolling_mr # cumulative fee to MR ratio, rolling quarterly
 
 	df['TV_MA'] = df['TV'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
 	df['MR_MA1'] = df['MR'].rolling(52, min_periods=1).mean()
