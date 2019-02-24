@@ -230,7 +230,7 @@ Assumes TV has already been set (independent variable).
 Assumes f and w have already been set upon evaluation of state t-1.
 This is because f and w are forward computed at all t for t+1.
 """
-def evaluate_state(df, t):
+def evaluate_state(df, t, control_rule):
 	tv = df.at[t,'TV']
 	df.at[t,'M'] = tv_to_m(tv)
 	delta_m = df.at[t,'M'] - df.at[t-1,'M']
@@ -249,12 +249,14 @@ def evaluate_state(df, t):
 	df.at[t,'MRL'] = df.at[t,'MR']/df.at[t,'LS']
 
 	if t < NUM_PERIODS-1:
-		df.at[t+1,'f'] = df.at[t,'f']
-		df.at[t+1,'w'] = df.at[t,'w']
+		next_f, next_w = control_rule(df, t)
+		df.at[t+1,'f'] = next_f
+		df.at[t+1,'w'] = next_w
 
 # TODO how do we forward project TV? Do we need to? probably not given we are using MAs
 # TODO enforce bounds on the magnitude of f and w changes per period (enforce on all
 # functions?)
+# TODO also need to enforce absolute bounds on both f and w
 
 # where are MAs essential?
 
@@ -265,10 +267,41 @@ def clamp(x, lower, upper):
 	return max(lower, min(x, upper))
 
 
-def smooth_update(f, w):
+def identity_control(df, t):
+	return (df.at[t,'f'], df.at[t,'w'])
+
+def taylor_control(df, t):
 	raise NotImplementedError()
 
-def debt_update(f, w):
+def smooth_control(df, t):
+	f, w = df.at[t,'f'], df.at[t,'w']
+	#tv_ma1 = df['TV'].rolling(1, min_periods=1).mean().at[t]
+	#tv_ma2 = df['TV'].rolling(2, min_periods=1).mean().at[t]
+	# next_f = (tv_ma2/tv_ma1)*f
+	#next_f = (tv_ma2/tv_ma1)*(df.at[t,'LS']/df.at[t-1,'LS'])*f
+
+	# next_f = (df.at[t-1,'TV']/df.at[t,'TV'])*(df.at[t,'LS']/df.at[t-1,'LS'])*f
+	# next_w = w
+
+	mrl_ma1 = df['MRL'].rolling(4, min_periods=1).mean().at[t]
+	mrl_ma2 = df['MRL'].rolling(13, min_periods=1).mean().at[t]
+
+	next_f = f*mrl_ma2/mrl_ma1
+
+	if mrl_ma1 < mrl_ma2:
+		next_w = w*1.05
+	elif mrl_ma1 > mrl_ma2:
+		next_w = w/1.05
+	else:
+		next_w = w
+
+	next_f = clamp(next_f, f/1.05, f*1.05)
+	next_w = clamp(next_w, w/1.05, w*1.05)
+
+	return (next_f, next_w)
+
+
+def debt_control(df, t):
 	raise NotImplementedError()
 
 if __name__ == '__main__':
@@ -291,7 +324,7 @@ if __name__ == '__main__':
 	set_genesis_state(df) # t=0
 
 	for t in range(1, NUM_PERIODS):
-		evaluate_state(df, t)
+		evaluate_state(df, t, smooth_control)
 
 	# compute some extra columns
 
