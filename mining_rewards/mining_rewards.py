@@ -258,11 +258,12 @@ def evaluate_state(df, t):
 
 # where are MAs essential?
 
-def identity_update(f,w):
-	raise NotImplementedError()
+"""
+Clamp the value of x between lower and upper
+"""
+def clamp(x, lower, upper):
+	return max(lower, min(x, upper))
 
-def taylor_update(f, w):
-	raise NotImplementedError()
 
 def smooth_update(f, w):
 	raise NotImplementedError()
