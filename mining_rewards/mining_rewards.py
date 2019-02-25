@@ -271,9 +271,18 @@ def evaluate_state(df, t, control_rule):
 """
 Clamp the value of x between lower and upper
 """
-def clamp(x, lower, upper):
+def clamp_between(x, lower, upper):
 	return max(lower, min(x, upper))
 
+def clamp_f(next, current):
+	lower = max(current/1.05, 0.001)
+	upper = min(current*1.05, 0.02)
+	return clamp_between(next, lower, upper)
+
+def clamp_w(next, current):
+	lower = max(current/1.05, 0)
+	upper = min(current*1.05, 0.9)
+	return clamp_between(next, lower, upper)
 
 def identity_control(df, t):
 	return (df.at[t,'f'], df.at[t,'w'])
@@ -281,30 +290,54 @@ def identity_control(df, t):
 def taylor_control(df, t):
 	raise NotImplementedError()
 
-def smooth_control(df, t):
+def opt_control(df, t):
 	f, w = df.at[t,'f'], df.at[t,'w']
 	#tv_ma1 = df['TV'].rolling(1, min_periods=1).mean().at[t]
 	#tv_ma2 = df['TV'].rolling(2, min_periods=1).mean().at[t]
 	# next_f = (tv_ma2/tv_ma1)*f
 	#next_f = (tv_ma2/tv_ma1)*(df.at[t,'LS']/df.at[t-1,'LS'])*f
 
-	# next_f = (df.at[t-1,'TV']/df.at[t,'TV'])*(df.at[t,'LS']/df.at[t-1,'LS'])*f
-	# next_w = w
+	# TODO need to somehow incorporate a MA here...
+	#next_f = (df.at[t-1,'TV']/df.at[t,'TV'])*(df.at[t,'LS']/df.at[t-1,'LS'])*f
 
-	mrl_ma1 = df['MRL'].rolling(4, min_periods=1).mean().at[t]
-	mrl_ma2 = df['MRL'].rolling(13, min_periods=1).mean().at[t]
+	fmrl_ma1 = (df['f']*df['TV']/df['LS']).rolling(4, min_periods=1).mean().at[t]
+	fmrl_ma2 = (df['f']*df['TV']/df['LS']).rolling(52, min_periods=1).mean().at[t]
 
-	next_f = f*mrl_ma2/mrl_ma1
 
-	if mrl_ma1 < mrl_ma2:
-		next_w = w*1.05
-	elif mrl_ma1 > mrl_ma2:
-		next_w = w/1.05
+	# mrl_ma1 = df['MRL'].rolling(4, min_periods=1).mean().at[t]
+	# mrl_ma2 = df['MRL'].rolling(52, min_periods=1).mean().at[t]
+
+	# TODO experiment with inc -- even a small inc can have a significant effect
+	inc = 0
+	#inc = 0.000001
+	next_f = f*(fmrl_ma2 + inc)/fmrl_ma1
+
+	# if mrl_ma1 < mrl_ma2:
+	# 	next_w = w*1.05
+	# elif mrl_ma1 > mrl_ma2:
+	# 	next_w = w/1.05
+	# else:
+	# 	next_w = w
+
+	# next_f = clamp_f(next_f, f)
+	# next_w = clamp_w(next_w, w)
+
+	next_f = clamp_between(next_f, f/1.025, f*1.05) # slower decrease than increase
+	next_f = clamp_between(next_f, 0.001, 0.02)
+
+	rolling_fees = (df['f']*df['TV']).rolling(13, min_periods=1).sum().at[t]
+	rolling_mr = df['MR'].rolling(13, min_periods=1).sum().at[t]
+	fmr_rolling = rolling_fees/rolling_mr # cumulative fee to MR ratio, rolling quarterly
+
+	if fmr_rolling > 0.33:
+		next_w = w + 0.05
+	elif fmr_rolling < 0.33:
+		next_w = w - 0.05
 	else:
 		next_w = w
-
-	next_f = clamp(next_f, f/1.05, f*1.05)
-	next_w = clamp(next_w, w/1.05, w*1.05)
+	
+	next_w = clamp_between(next_w, w/1.1, w*1.1)
+	next_w = clamp_between(next_w, 0.05, 0.9)
 
 	return (next_f, next_w)
 
@@ -313,6 +346,9 @@ def debt_control(df, t):
 	raise NotImplementedError()
 
 if __name__ == '__main__':
+	# seeds to learn from
+	# 0, 12, 2, 42
+
 	np.random.seed(0) # for consistent outputs while developing
 	t = range(0, NUM_PERIODS)
 	tv = gbm(1, MU, SIGMA, NUM_YEARS, PERIODS_PER_YEAR)
@@ -332,7 +368,7 @@ if __name__ == '__main__':
 	set_genesis_state(df) # t=0
 
 	for t in range(1, NUM_PERIODS):
-		evaluate_state(df, t, smooth_control)
+		evaluate_state(df, t, opt_control)
 
 	# compute some extra columns
 
