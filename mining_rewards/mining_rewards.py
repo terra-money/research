@@ -178,21 +178,24 @@ def plot_results(df):
 Stochastic P/E multiple for Luna at time t, LPE(t)
 Basic idea is to increase multiple during growth, decrease during recession
 We model LPE(t) as (1 + X(t))*LPE(t-1), where X(t) is N(μ, σ):
-μ is (MA1/MA2 - 1)/100, where MA1, MA2 are 1 and 2 year MAs for MR (earnings)
+μ is (MA1/MA2 - 1)/100, where MA1, MA2 are 1 and 2 year MAs for TV
 σ is 0.5% if MA1 >= MA2, otherwise it is 1%
 Note that the updates are weekly, so eg 1% weekly vol is 7.2% annual vol
 
-LPE is basically a random walk whose next value depends on the trend in MR
-We make it more volatile when MR is in a downtrend
+LPE is basically a random walk whose next value depends on the trend in TV
+We make it more volatile when TV is in a downtrend
 """
 # TODO may want to punish drops more by increasing negative mu's by 50-100%
+# TODO explain why we are using TV rather than MR here
 def lpe(df, t):
 	prev_lpe = df.at[t-1,'LPE']
-	mr_ma1 = df['MR'].rolling(PERIODS_PER_YEAR, min_periods=1).mean().at[t]
-	mr_ma2 = df['MR'].rolling(2*PERIODS_PER_YEAR, min_periods=1).mean().at[t]
-	mr_delta = mr_ma1/mr_ma2 - 1
-	mu = mr_delta/100
-	sigma = 0.005 if mr_ma1 >= mr_ma2 else 0.01
+	tv_ma1 = df['TV'].rolling(PERIODS_PER_YEAR, min_periods=1).mean().at[t]
+	tv_ma2 = df['TV'].rolling(2*PERIODS_PER_YEAR, min_periods=1).mean().at[t]
+	tv_delta = tv_ma1/tv_ma2 - 1
+	mu = tv_delta/50
+	if tv_ma1 < tv_ma2:
+		mu *= 1.5
+	sigma = 0.005 if tv_ma1 >= tv_ma2 else 0.01
 	x = np.random.normal(mu, sigma)
 	return (1 + x)*prev_lpe
 
