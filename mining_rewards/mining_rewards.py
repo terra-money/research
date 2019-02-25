@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.ticker import PercentFormatter
 import argparse
+import math
 
 # common hack to import from sibling directory utils
 # alternatives involve making all directories packages, creating setup files etc
@@ -91,8 +91,8 @@ NUM_PERIODS = int(TOTAL_DAYS/PERIOD)
 
 PERIODS_PER_WINDOW = 13 # 13-week windows, ie 1 fiscal quarter
 
-GENESIS_FEE = 0.5/100
-GENESIS_SEIGNIORAGE_WEIGHT = 0.1
+GENESIS_FEE = 0.25/100
+GENESIS_SEIGNIORAGE_WEIGHT = 0.05
 GENESIS_LUNA_SUPPLY = 100
 
 GENESIS_LPE = 20
@@ -131,8 +131,13 @@ def plot_results(df):
 	ax.set_ylabel('Mining Rewards ($)')
 	#ax.right_ax.set_ylabel('Mining Rewards per Luna ($)')
 
+	# plot FMRL
+	ax = df.loc[:, ['FMRL_MA4', 'FMRL_MA52']].plot()
+	ax.set_xlabel('time (weeks)')
+	ax.set_ylabel('Mining Rewards per Luna ($)')
+
 	# plot MRL
-	ax = df.loc[:, ['MRL_MA4', 'MRL_MA13']].plot()
+	ax = df.loc[:, ['MRL_MA13', 'MRL_MA52']].plot()
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Mining Rewards per Luna ($)')
 
@@ -333,15 +338,18 @@ if __name__ == '__main__':
 	df['LRR'] = df['LMC']/df['M'] # Luna Reserve Ratio
 	df['LP'] = df['LMC']/df['LS'] # Luna Price
 
-	rolling_fees = (df['f']*df['TV']).rolling(PERIODS_PER_WINDOW, min_periods=1).sum()
-	rolling_mr = df['MR'].rolling(PERIODS_PER_WINDOW, min_periods=1).sum()
+	rolling_fees = (df['f']*df['TV']).rolling(52, min_periods=1).sum()
+	rolling_mr = df['MR'].rolling(52, min_periods=1).sum()
 	df['FMR'] = rolling_fees/rolling_mr # cumulative fee to MR ratio, rolling quarterly
 
-	df['TV_MA'] = df['TV'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
-	df['MR_MA1'] = df['MR'].rolling(13, min_periods=1).mean()
-	df['MR_MA2'] = df['MR'].rolling(52, min_periods=1).mean()
-	df['MRL_MA4'] = df['MRL'].rolling(4, min_periods=1).mean()
+	df['FMRL_MA4'] = (df['f']*df['TV']/df['LS']).rolling(4, min_periods=1).mean()
+	df['FMRL_MA52'] = (df['f']*df['TV']/df['LS']).rolling(52, min_periods=1).mean()
+
+	df['TV_MA'] = df['TV'].rolling(52, min_periods=1).mean()
+	df['MR_MA1'] = df['MR'].rolling(52, min_periods=1).mean()
+	df['MR_MA2'] = df['MR'].rolling(104, min_periods=1).mean()
 	df['MRL_MA13'] = df['MRL'].rolling(13, min_periods=1).mean()
+	df['MRL_MA52'] = df['MRL'].rolling(52, min_periods=1).mean()
 	df['ΔM_MA'] = df['ΔM'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
 	df['LRR_MA'] = df['LRR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
 	df['LP_MA'] = df['LP'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
@@ -353,5 +361,5 @@ if __name__ == '__main__':
 	# TODO compute and compare growth rates and vols of main variables eg TV, MRL, LP etc
 	# This could be an excellent and straightforward way to aggregate results from many simulations
 
-
+	# TODO plot rolling var between TV and MRL
 
