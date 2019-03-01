@@ -8,9 +8,13 @@ import math
 # alternatives involve making all directories packages, creating setup files etc
 import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from utils.gbm import gbm
+from utils.gbm import gbm, gbm_cyclical
 
 """
+ ----------------------------------------------------------
+| "You can't eliminate risk, you can only move it around." |
+ ----------------------------------------------------------
+
 Our core objective in designing Terra's stability mechanism is to contain volatility in Luna price changes.
 
 Mining Rewards
@@ -62,6 +66,7 @@ absorption/smoothing factor?
 Outputs
 """
 
+# TODO briefly explain divs vs buybacks and how they differ in the code
 
 # State
 # t representing week (0 to 52*5-1): 10 years
@@ -100,6 +105,7 @@ GENESIS_LPE = 20
 # GBM parameters for TV
 MU = 0.25
 SIGMA = 0.4
+
 
 def plot_results(df):
 	# plot TV
@@ -187,6 +193,7 @@ We make it more volatile when TV is in a downtrend
 """
 # TODO may want to punish drops more by increasing negative mu's by 50-100%
 # TODO explain why we are using TV rather than MR here
+# TODO make LPE more responsive, 1 and 2 year MAs are too slow
 def lpe(df, t):
 	prev_lpe = df.at[t-1,'LPE']
 	tv_ma1 = df['TV'].rolling(PERIODS_PER_YEAR, min_periods=1).mean().at[t]
@@ -207,6 +214,7 @@ def tv_to_m(tv):
 # Mining Rewards to Luna Market Cap
 # TODO add randomness
 # TODO use MA rather than latest MR to smooth out
+# TODO** in the buyback setting we may need to include seigniorage in "earnings"!
 def mr_to_lmc(df, t):
 	mr_ma = df['MR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean().at[t]
 	annualized_mr = mr_ma*PERIODS_PER_YEAR
@@ -218,6 +226,7 @@ def mr_to_lmc(df, t):
 def set_genesis_state(df):
 	tv = df.at[0,'TV']
 	df.at[0,'M'] = tv_to_m(tv)
+	df.at[0,'S'] = 0
 	df.at[0,'f'] = GENESIS_FEE
 	df.at[0,'w'] = GENESIS_SEIGNIORAGE_WEIGHT
 	df.at[0,'MR'] = df.at[0,'f']*df.at[0,'TV'] # seigniorage not defined at genesis
@@ -243,14 +252,16 @@ def evaluate_state(df, t, control_rule):
 	df.at[t,'M'] = tv_to_m(tv)
 	delta_m = df.at[t,'M'] - df.at[t-1,'M']
 	df.at[t,'S'] = max(delta_m, 0)
-	df.at[t,'MR'] = df.at[t,'f']*df.at[t,'TV'] + df.at[t,'w']*df.at[t,'S']
+	df.at[t,'MR'] = df.at[t,'f']*df.at[t,'TV']
 	df.at[t,'LPE'] = lpe(df, t)
 	df.at[t,'LMC'] = mr_to_lmc(df, t)
 
+	lp_prev = df.at[t-1,'LMC']/df.at[t-1,'LS'] # previous Luna price
+
 	if delta_m >= 0: # expansion
-		df.at[t,'LS'] = df.at[t-1,'LS']
+		num_luna_burned = df.at[t,'w']*delta_m/lp_prev
+		df.at[t,'LS'] = df.at[t-1,'LS'] - num_luna_burned
 	else: # contraction
-		lp_prev = df.at[t-1,'LMC']/df.at[t-1,'LS'] # previous Luna price
 		num_luna_issued = -delta_m/lp_prev
 		df.at[t,'LS'] = df.at[t-1,'LS'] + num_luna_issued
 
@@ -271,20 +282,10 @@ def evaluate_state(df, t, control_rule):
 """
 Clamp the value of x between lower and upper
 """
-def clamp_between(x, lower, upper):
+def clamp(x, lower, upper):
 	return max(lower, min(x, upper))
 
-def clamp_f(next, current):
-	lower = max(current/1.05, 0.001)
-	upper = min(current*1.05, 0.02)
-	return clamp_between(next, lower, upper)
-
-def clamp_w(next, current):
-	lower = max(current/1.05, 0)
-	upper = min(current*1.05, 0.9)
-	return clamp_between(next, lower, upper)
-
-def identity_control(df, t):
+def null_control(df, t):
 	return (df.at[t,'f'], df.at[t,'w'])
 
 def taylor_control(df, t):
@@ -308,9 +309,13 @@ def opt_control(df, t):
 	# mrl_ma2 = df['MRL'].rolling(52, min_periods=1).mean().at[t]
 
 	# TODO experiment with inc -- even a small inc can have a significant effect
-	inc = 0
-	#inc = 0.000001
+	#inc = 0
+	inc = 0.0000005
 	next_f = f*(fmrl_ma2 + inc)/fmrl_ma1
+
+	if abs(next_f - f) < 0.0001:
+		next_f = f
+
 
 	# if mrl_ma1 < mrl_ma2:
 	# 	next_w = w*1.05
@@ -322,22 +327,22 @@ def opt_control(df, t):
 	# next_f = clamp_f(next_f, f)
 	# next_w = clamp_w(next_w, w)
 
-	next_f = clamp_between(next_f, f/1.025, f*1.05) # slower decrease than increase
-	next_f = clamp_between(next_f, 0.001, 0.02)
+	next_f = clamp(next_f, f - 0.0005, f + 0.0005) # slower decrease than increase
+	next_f = clamp(next_f, 0.001, 0.02)
 
 	rolling_fees = (df['f']*df['TV']).rolling(13, min_periods=1).sum().at[t]
-	rolling_mr = df['MR'].rolling(13, min_periods=1).sum().at[t]
+	rolling_mr = (df['f']*df['TV'] + df['w']*df['S']).rolling(13, min_periods=1).sum().at[t]
 	fmr_rolling = rolling_fees/rolling_mr # cumulative fee to MR ratio, rolling quarterly
 
-	if fmr_rolling > 0.33:
-		next_w = w + 0.05
-	elif fmr_rolling < 0.33:
-		next_w = w - 0.05
+	if fmr_rolling > 0.3:
+		next_w = w + 0.01
+	elif fmr_rolling < 0.2:
+		next_w = w - 0.01
 	else:
 		next_w = w
 	
-	next_w = clamp_between(next_w, w/1.1, w*1.1)
-	next_w = clamp_between(next_w, 0.05, 0.9)
+	next_w = clamp(next_w, w/1.1, w*1.1)
+	next_w = clamp(next_w, 0.05, 0.9)
 
 	return (next_f, next_w)
 
@@ -351,7 +356,7 @@ if __name__ == '__main__':
 
 	np.random.seed(0) # for consistent outputs while developing
 	t = range(0, NUM_PERIODS)
-	tv = gbm(1, MU, SIGMA, NUM_YEARS, PERIODS_PER_YEAR)
+	tv = gbm_cyclical(1, mu_boom=0.3, mu_bust=-0.2, sigma=0.2, cycle_lengths=[2,3,5], increments_per_period=52)
 
 	df = pd.DataFrame(data = {'t': t, 'TV': tv})
 	df['M'] = np.NaN # Terra Money Supply
@@ -378,7 +383,7 @@ if __name__ == '__main__':
 	df['LP'] = df['LMC']/df['LS'] # Luna Price
 
 	rolling_fees = (df['f']*df['TV']).rolling(52, min_periods=1).sum()
-	rolling_mr = df['MR'].rolling(52, min_periods=1).sum()
+	rolling_mr = (df['f']*df['TV'] + df['w']*df['S']).rolling(52, min_periods=1).sum()
 	df['FMR'] = rolling_fees/rolling_mr # cumulative fee to MR ratio, rolling quarterly
 
 	df['FMRL_MA4'] = (df['f']*df['TV']/df['LS']).rolling(4, min_periods=1).mean()
@@ -392,6 +397,9 @@ if __name__ == '__main__':
 	df['ΔM_MA'] = df['ΔM'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
 	df['LRR_MA'] = df['LRR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
 	df['LP_MA'] = df['LP'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
+
+	df['f_MA'] = df['f'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
+	df['w_MA'] = df['w'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
 
 	print(df)
 
