@@ -348,7 +348,16 @@ def opt_control(df, t):
 
 
 def debt_control(df, t):
-	raise NotImplementedError()
+	if df.at[t,'LS'] <= GENESIS_LUNA_SUPPLY:
+		return (0.001, 0)
+
+	debt_ratio = 1 - GENESIS_LUNA_SUPPLY/df.at[t,'LS']
+	next_f = debt_ratio*0.02
+	next_w = debt_ratio
+
+	next_f = clamp(next_f, 0.001, 0.02)
+	next_w = clamp(next_w, 0, 1) # effectively no bounds
+	return (next_f, next_w)
 
 if __name__ == '__main__':
 	# seeds to learn from
