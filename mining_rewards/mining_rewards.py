@@ -360,6 +360,14 @@ def debt_control(df, t):
 	return (next_f, next_w)
 
 if __name__ == '__main__':
+	# read control rule from the command line
+	parser = argparse.ArgumentParser()
+	parser.add_argument('control_rule', type=str, help='null, debt or opt')
+	args = parser.parse_args()
+	if args.control_rule not in ['null', 'debt', 'opt']:
+		parser.error('control rules: null, debt or opt')
+	control_rule = globals()[args.control_rule + '_control']
+
 	# seeds to learn from
 	# 0, 12, 2, 42
 
@@ -382,7 +390,7 @@ if __name__ == '__main__':
 	set_genesis_state(df) # t=0
 
 	for t in range(1, NUM_PERIODS):
-		evaluate_state(df, t, opt_control)
+		evaluate_state(df, t, control_rule)
 
 	# compute some extra columns
 
