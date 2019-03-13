@@ -67,9 +67,10 @@ Outputs
 """
 
 # TODO briefly explain divs vs buybacks and how they differ in the code
+# TODO develop clearer terminology, MR has become confusing
 
 # State
-# t representing week (0 to 52*5-1): 10 years
+# t representing week (0 to 52*10-1): 10 years
 # TV
 # TMCAP
 # seigniorage
@@ -123,7 +124,7 @@ def plot_results(df):
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Transaction Fee (%)')
 	ax.right_ax.set_ylabel('Seigniorage Weight (%)')
-	#ax.set_ylim(0, 0.02)
+	ax.set_ylim(0, 0.02)
 	ax.right_ax.set_ylim(0, 1)
 	y_ticks = ax.get_yticks()
 	ax.set_yticklabels(['{:,.2%}'.format(y) for y in y_ticks])
@@ -216,7 +217,8 @@ def tv_to_m(tv):
 # TODO use MA rather than latest MR to smooth out
 # TODO** in the buyback setting we may need to include seigniorage in "earnings"!
 def mr_to_lmc(df, t):
-	mr_ma = df['MR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean().at[t]
+	#mr_ma = df['MR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean().at[t]
+	mr_ma = (df['f']*df['TV'] + df['w']*df['S']).rolling(13, min_periods=1).mean().at[t]
 	annualized_mr = mr_ma*PERIODS_PER_YEAR
 	lpe = df.at[t,'LPE']
 	return annualized_mr*lpe
@@ -272,13 +274,6 @@ def evaluate_state(df, t, control_rule):
 		df.at[t+1,'f'] = next_f
 		df.at[t+1,'w'] = next_w
 
-# TODO how do we forward project TV? Do we need to? probably not given we are using MAs
-# TODO enforce bounds on the magnitude of f and w changes per period (enforce on all
-# functions?)
-# TODO also need to enforce absolute bounds on both f and w
-
-# where are MAs essential?
-
 """
 Clamp the value of x between lower and upper
 """
@@ -287,65 +282,6 @@ def clamp(x, lower, upper):
 
 def null_control(df, t):
 	return (df.at[t,'f'], df.at[t,'w'])
-
-def taylor_control(df, t):
-	raise NotImplementedError()
-
-def opt_control(df, t):
-	f, w = df.at[t,'f'], df.at[t,'w']
-	#tv_ma1 = df['TV'].rolling(1, min_periods=1).mean().at[t]
-	#tv_ma2 = df['TV'].rolling(2, min_periods=1).mean().at[t]
-	# next_f = (tv_ma2/tv_ma1)*f
-	#next_f = (tv_ma2/tv_ma1)*(df.at[t,'LS']/df.at[t-1,'LS'])*f
-
-	# TODO need to somehow incorporate a MA here...
-	#next_f = (df.at[t-1,'TV']/df.at[t,'TV'])*(df.at[t,'LS']/df.at[t-1,'LS'])*f
-
-	fmrl_ma1 = (df['f']*df['TV']/df['LS']).rolling(4, min_periods=1).mean().at[t]
-	fmrl_ma2 = (df['f']*df['TV']/df['LS']).rolling(52, min_periods=1).mean().at[t]
-
-
-	# mrl_ma1 = df['MRL'].rolling(4, min_periods=1).mean().at[t]
-	# mrl_ma2 = df['MRL'].rolling(52, min_periods=1).mean().at[t]
-
-	# TODO experiment with inc -- even a small inc can have a significant effect
-	#inc = 0
-	inc = 0.0000005
-	next_f = f*(fmrl_ma2 + inc)/fmrl_ma1
-
-	if abs(next_f - f) < 0.0001:
-		next_f = f
-
-
-	# if mrl_ma1 < mrl_ma2:
-	# 	next_w = w*1.05
-	# elif mrl_ma1 > mrl_ma2:
-	# 	next_w = w/1.05
-	# else:
-	# 	next_w = w
-
-	# next_f = clamp_f(next_f, f)
-	# next_w = clamp_w(next_w, w)
-
-	next_f = clamp(next_f, f - 0.0005, f + 0.0005) # slower decrease than increase
-	next_f = clamp(next_f, 0.001, 0.02)
-
-	rolling_fees = (df['f']*df['TV']).rolling(13, min_periods=1).sum().at[t]
-	rolling_mr = (df['f']*df['TV'] + df['w']*df['S']).rolling(13, min_periods=1).sum().at[t]
-	fmr_rolling = rolling_fees/rolling_mr # cumulative fee to MR ratio, rolling quarterly
-
-	if fmr_rolling > 0.3:
-		next_w = w + 0.01
-	elif fmr_rolling < 0.2:
-		next_w = w - 0.01
-	else:
-		next_w = w
-	
-	next_w = clamp(next_w, w/1.1, w*1.1)
-	next_w = clamp(next_w, 0.05, 0.9)
-
-	return (next_f, next_w)
-
 
 def debt_control(df, t):
 	if df.at[t,'LS'] <= GENESIS_LUNA_SUPPLY:
@@ -359,6 +295,27 @@ def debt_control(df, t):
 	next_w = clamp(next_w, 0, 1) # effectively no bounds
 	return (next_f, next_w)
 
+def opt_control(df, t):
+	f, w = df.at[t,'f'], df.at[t,'w']
+	fmrl_ma1 = (df['f']*df['TV']/df['LS']).rolling(4, min_periods=1).mean().at[t]
+	fmrl_ma2 = (df['f']*df['TV']/df['LS']).rolling(52, min_periods=1).mean().at[t]
+	inc = 10**(-6)
+
+	next_f = f*(fmrl_ma2 + inc)/fmrl_ma1
+	next_f = clamp(next_f, f - 0.0005, f + 0.0005)
+	next_f = clamp(next_f, 0.001, 0.02)
+
+	rolling_fees = (df['f']*df['TV']).rolling(13, min_periods=1).sum().at[t]
+	rolling_mr = (df['f']*df['TV'] + df['w']*df['S']).rolling(13, min_periods=1).sum().at[t]
+	fmr_rolling = rolling_fees/rolling_mr # cumulative fee to MR ratio, rolling quarterly
+	smr_rolling = 1 - fmr_rolling
+
+	next_w = w*0.67/smr_rolling
+	next_w = clamp(next_w, w - 0.01, w + 0.01)
+	next_w = clamp(next_w, 0.05, 0.9)
+
+	return (next_f, next_w)
+
 if __name__ == '__main__':
 	# read control rule from the command line
 	parser = argparse.ArgumentParser()
@@ -369,11 +326,11 @@ if __name__ == '__main__':
 	control_rule = globals()[args.control_rule + '_control']
 
 	# seeds to learn from
-	# 0, 12, 2, 42
+	# 0, 12, 2, 42, 119
 
 	np.random.seed(0) # for consistent outputs while developing
 	t = range(0, NUM_PERIODS)
-	tv = gbm_cyclical(1, mu_boom=0.3, mu_bust=-0.2, sigma=0.2, cycle_lengths=[2,3,5], increments_per_period=52)
+	tv = gbm_cyclical(1, mu_boom=0.6, mu_bust=-0.5, sigma=0.4, cycle_lengths=[2,3,5], increments_per_period=52)
 
 	df = pd.DataFrame(data = {'t': t, 'TV': tv})
 	df['M'] = np.NaN # Terra Money Supply
@@ -419,6 +376,8 @@ if __name__ == '__main__':
 	df['w_MA'] = df['w'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
 
 	print(df)
+
+	#df.loc[:, ['TV','M','LMC','f','w']].to_csv('mining_rewards_4.csv', index=False)
 
 	plot_results(df)
 
