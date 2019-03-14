@@ -88,7 +88,7 @@ Outputs
 # velocity (26)
 # Luna P/E ratio (random walk in range 1 to 200?)
 
-V = 26 # annual Terra velocity
+V = 26*2 # annual Terra velocity
 NUM_YEARS = 10
 TOTAL_DAYS = NUM_YEARS*364
 PERIOD = 7 # in days
@@ -97,15 +97,30 @@ NUM_PERIODS = int(TOTAL_DAYS/PERIOD)
 
 PERIODS_PER_WINDOW = 13 # 13-week windows, ie 1 fiscal quarter
 
-GENESIS_FEE = 0.25/100
+GENESIS_FEE = 0.25/100/2
 GENESIS_SEIGNIORAGE_WEIGHT = 0.05
 GENESIS_LUNA_SUPPLY = 100
 
 GENESIS_LPE = 20
 
 # GBM parameters for TV
-MU = 0.25
+MU_BOOM = 0.6
+MU_BUST = -0.5
 SIGMA = 0.4
+CYCLE_LENGTHS = [2,3,5]
+
+# min and max values for f and w
+F_MIN = 0.001/2
+F_MAX = 0.02/2
+W_MIN = 0.05
+W_MAX = 0.25
+
+# max changes in f and w in any given period
+F_MAX_STEP = 0.0005/2
+W_MAX_STEP = 0.01
+
+MRL_INC = 10**(-6)
+SMR_TARGET = 0.75
 
 
 def plot_results(df):
@@ -124,7 +139,7 @@ def plot_results(df):
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Transaction Fee (%)')
 	ax.right_ax.set_ylabel('Seigniorage Weight (%)')
-	ax.set_ylim(0, 0.02)
+	ax.set_ylim(0, F_MAX)
 	ax.right_ax.set_ylim(0, 1)
 	y_ticks = ax.get_yticks()
 	ax.set_yticklabels(['{:,.2%}'.format(y) for y in y_ticks])
@@ -285,34 +300,34 @@ def null_control(df, t):
 
 def debt_control(df, t):
 	if df.at[t,'LS'] <= GENESIS_LUNA_SUPPLY:
-		return (0.001, 0)
+		return (F_MIN, 0)
 
 	debt_ratio = 1 - GENESIS_LUNA_SUPPLY/df.at[t,'LS']
-	next_f = debt_ratio*0.02
+	next_f = debt_ratio*F_MAX
 	next_w = debt_ratio
 
-	next_f = clamp(next_f, 0.001, 0.02)
+	next_f = clamp(next_f, F_MIN, F_MAX)
 	next_w = clamp(next_w, 0, 1) # effectively no bounds
+
 	return (next_f, next_w)
 
 def opt_control(df, t):
 	f, w = df.at[t,'f'], df.at[t,'w']
 	fmrl_ma1 = (df['f']*df['TV']/df['LS']).rolling(4, min_periods=1).mean().at[t]
 	fmrl_ma2 = (df['f']*df['TV']/df['LS']).rolling(52, min_periods=1).mean().at[t]
-	inc = 10**(-6)
 
-	next_f = f*(fmrl_ma2 + inc)/fmrl_ma1
-	next_f = clamp(next_f, f - 0.0005, f + 0.0005)
-	next_f = clamp(next_f, 0.001, 0.02)
+	next_f = f*(fmrl_ma2 + MRL_INC)/fmrl_ma1
+	next_f = clamp(next_f, f - F_MAX_STEP, f + F_MAX_STEP)
+	next_f = clamp(next_f, F_MIN, F_MAX)
 
 	rolling_fees = (df['f']*df['TV']).rolling(13, min_periods=1).sum().at[t]
 	rolling_mr = (df['f']*df['TV'] + df['w']*df['S']).rolling(13, min_periods=1).sum().at[t]
 	fmr_rolling = rolling_fees/rolling_mr # cumulative fee to MR ratio, rolling quarterly
 	smr_rolling = 1 - fmr_rolling
 
-	next_w = w*0.67/smr_rolling
-	next_w = clamp(next_w, w - 0.01, w + 0.01)
-	next_w = clamp(next_w, 0.05, 0.9)
+	next_w = w*SMR_TARGET/smr_rolling
+	next_w = clamp(next_w, w - W_MAX_STEP, w + W_MAX_STEP)
+	next_w = clamp(next_w, W_MIN, W_MAX)
 
 	return (next_f, next_w)
 
@@ -330,7 +345,7 @@ if __name__ == '__main__':
 
 	np.random.seed(0) # for consistent outputs while developing
 	t = range(0, NUM_PERIODS)
-	tv = gbm_cyclical(1, mu_boom=0.6, mu_bust=-0.5, sigma=0.4, cycle_lengths=[2,3,5], increments_per_period=52)
+	tv = gbm_cyclical(1, mu_boom=MU_BOOM, mu_bust=MU_BUST, sigma=SIGMA, cycle_lengths=CYCLE_LENGTHS, increments_per_period=52)
 
 	df = pd.DataFrame(data = {'t': t, 'TV': tv})
 	df['M'] = np.NaN # Terra Money Supply
