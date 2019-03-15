@@ -97,8 +97,7 @@ NUM_PERIODS = int(TOTAL_DAYS/PERIOD)
 
 PERIODS_PER_WINDOW = 13 # 13-week windows, ie 1 fiscal quarter
 
-GENESIS_FEE = 0.25/100/2
-GENESIS_SEIGNIORAGE_WEIGHT = 0.05
+F_GENESIS = 0.25/100/2
 GENESIS_LUNA_SUPPLY = 100
 
 GENESIS_LPE = 20
@@ -112,8 +111,15 @@ CYCLE_LENGTHS = [2,3,5]
 # min and max values for f and w
 F_MIN = 0.001/2
 F_MAX = 0.02/2
-W_MIN = 0.05
-W_MAX = 0.25
+
+# set in the main function
+# W_MAX is set to 1 - FIAT_RATIO
+# W_MIN is the lesser of W_MIN_CAP and W_MAX
+FIAT_RATIO = None
+W_MIN_CAP = 0.05
+W_MIN = None
+W_MAX = None
+W_GENESIS = None
 
 # max changes in f and w in any given period
 F_MAX_STEP = 0.0005/2
@@ -184,6 +190,16 @@ def plot_results(df):
 	ax.set_ylabel('Terra Money Supply ($)')
 	ax.right_ax.set_ylabel('Luna Market Cap ($)')
 
+	# plot fiat
+	ax = df.loc[:, ['fiat']].plot()
+	ax.set_xlabel('time (weeks)')
+	ax.set_ylabel('fiat')
+
+	# plot FRR
+	ax = df.loc[:, ['FRR']].plot()
+	ax.set_xlabel('time (weeks)')
+	ax.set_ylabel('Fiat Reserve Ratio')
+
 	# plot LRR
 	ax = df.loc[:, ['LRR', 'LRR_MA']].plot()
 	ax.set_xlabel('time (weeks)')
@@ -243,17 +259,18 @@ def mr_to_lmc(df, t):
 def set_genesis_state(df):
 	tv = df.at[0,'TV']
 	df.at[0,'M'] = tv_to_m(tv)
+	df.at[0,'fiat'] = df.at[0,'M']*FIAT_RATIO # adhere to FIAT_RATIO at genesis
 	df.at[0,'S'] = 0
-	df.at[0,'f'] = GENESIS_FEE
-	df.at[0,'w'] = GENESIS_SEIGNIORAGE_WEIGHT
+	df.at[0,'f'] = F_GENESIS
+	df.at[0,'w'] = W_GENESIS
 	df.at[0,'MR'] = df.at[0,'f']*df.at[0,'TV'] # seigniorage not defined at genesis
 	df.at[0,'LPE'] = GENESIS_LPE
 	df.at[0,'LMC'] = mr_to_lmc(df, 0)
 	df.at[0,'LS'] = GENESIS_LUNA_SUPPLY
 	df.at[0,'MRL'] = df.at[0,'MR']/df.at[0,'LS']
 	# f and w are forward-computed for the following state
-	df.at[1,'f'] = GENESIS_FEE
-	df.at[1,'w'] = GENESIS_SEIGNIORAGE_WEIGHT
+	df.at[1,'f'] = F_GENESIS
+	df.at[1,'w'] = W_GENESIS
 
 
 """
@@ -274,6 +291,11 @@ def evaluate_state(df, t, control_rule):
 	df.at[t,'LMC'] = mr_to_lmc(df, t)
 
 	lp_prev = df.at[t-1,'LMC']/df.at[t-1,'LS'] # previous Luna price
+
+	# start with fiat
+	delta_fiat = delta_m*FIAT_RATIO
+	df.at[t,'fiat'] = df.at[t-1,'fiat'] + delta_fiat
+	delta_m = delta_m - delta_fiat
 
 	if delta_m >= 0: # expansion
 		num_luna_burned = df.at[t,'w']*delta_m/lp_prev
@@ -325,7 +347,13 @@ def opt_control(df, t):
 	fmr_rolling = rolling_fees/rolling_mr # cumulative fee to MR ratio, rolling quarterly
 	smr_rolling = 1 - fmr_rolling
 
-	next_w = w*SMR_TARGET/smr_rolling
+	# deal with edge cases where either smr_rolling or SMR_TARGET is 0
+	if smr_rolling > 0:
+		next_w = w*SMR_TARGET/smr_rolling
+	elif SMR_TARGET > 0:
+		next_w = W_MAX
+	else:
+		next_w = W_MIN
 	next_w = clamp(next_w, w - W_MAX_STEP, w + W_MAX_STEP)
 	next_w = clamp(next_w, W_MIN, W_MAX)
 
@@ -334,11 +362,16 @@ def opt_control(df, t):
 if __name__ == '__main__':
 	# read control rule from the command line
 	parser = argparse.ArgumentParser()
-	parser.add_argument('control_rule', type=str, help='null, debt or opt')
+	parser.add_argument('control_rule', type=str, choices=['null', 'debt', 'opt'], help='null, debt or opt')
+	parser.add_argument('-f', '--fiat_ratio', type=float, default=0, dest='fiat_ratio', help='fiat ratio between 0 and 1')
 	args = parser.parse_args()
-	if args.control_rule not in ['null', 'debt', 'opt']:
-		parser.error('control rules: null, debt or opt')
+	if args.fiat_ratio < 0 or args.fiat_ratio > 1:
+		parser.error("fiat ratio needs to be between 0 and 1")
 	control_rule = globals()[args.control_rule + '_control']
+	FIAT_RATIO = args.fiat_ratio
+	W_MAX = 1 - FIAT_RATIO
+	W_MIN = min(W_MAX, W_MIN_CAP)
+	W_GENESIS = W_MIN
 
 	# seeds to learn from
 	# 0, 12, 2, 42, 119
@@ -349,6 +382,7 @@ if __name__ == '__main__':
 
 	df = pd.DataFrame(data = {'t': t, 'TV': tv})
 	df['M'] = np.NaN # Terra Money Supply
+	df['fiat'] = np.NaN
 	df['S'] = np.NaN # seigniorage
 	df['f'] = np.NaN # TX fee
 	df['w'] = np.NaN # seigniorage weight
@@ -368,6 +402,7 @@ if __name__ == '__main__':
 
 	# TODO plot fee to seigniorage revenue ratio -- do we want to smooth this out?
 	df['ΔM'] = df['M'] - df['M'].shift(1) # changes in M
+	df['FRR'] = df['fiat']/df['M'] # Fiat Reserve Ratio
 	df['LRR'] = df['LMC']/df['M'] # Luna Reserve Ratio
 	df['LP'] = df['LMC']/df['LS'] # Luna Price
 
