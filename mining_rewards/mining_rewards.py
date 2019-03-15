@@ -15,6 +15,18 @@ from utils.gbm import gbm, gbm_cyclical
 | "You can't eliminate risk, you can only move it around." |
  ----------------------------------------------------------
 
+---------------------------------------------------------------------------------
+ Usage:																			|
+ 	To run simulation using opt control rule: 									|
+ 		python mining_rewards.py opt 											|
+																				|
+ 	To run simulation using null control rule and optional fiat ratio of 50%:	|
+ 		python mining_rewards.py null --fiat_ratio 0.5							|
+																				|
+ 	For detailed usage instructions:											|
+ 		python mining_rewards.py -h 											|
+---------------------------------------------------------------------------------
+
 Our core objective in designing Terra's stability mechanism is to contain volatility in Luna price changes.
 
 Mining Rewards
@@ -53,8 +65,6 @@ decreasing rewards when the economy is growing.
 We have two levers at our disposal to reduce volatility in mining rewards: transaction fees, and the proportion
 of seigniorage that gets allocated to mining rewards. In what follows we implement this basic idea: adjust the
 two levers to smooth out volatility in unit mining rewards.
-
-Usage: +++++++++
 
 Inputs
 
@@ -362,7 +372,7 @@ def opt_control(df, t):
 if __name__ == '__main__':
 	# read control rule from the command line
 	parser = argparse.ArgumentParser()
-	parser.add_argument('control_rule', type=str, choices=['null', 'debt', 'opt'], help='null, debt or opt')
+	parser.add_argument('control_rule', type=str, choices=['null', 'debt', 'opt'], help='mining rewards control rule')
 	parser.add_argument('-f', '--fiat_ratio', type=float, default=0, dest='fiat_ratio', help='fiat ratio between 0 and 1')
 	args = parser.parse_args()
 	if args.fiat_ratio < 0 or args.fiat_ratio > 1:
