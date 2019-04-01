@@ -20,7 +20,7 @@ from utils.gbm import gbm, gbm_cyclical
  	To run simulation using opt control rule: 									|
  		python mining_rewards.py opt 											|
 																				|
- 	To run simulation using null control rule and optional fiat ratio of 50%:	|
+ 	To run simulation using null control rule and fiat ratio of 50%:        	|
  		python mining_rewards.py null --fiat_ratio 0.5							|
 																				|
  	For detailed usage instructions:											|
@@ -107,34 +107,35 @@ NUM_PERIODS = int(TOTAL_DAYS/PERIOD)
 
 PERIODS_PER_WINDOW = 13 # 13-week windows, ie 1 fiscal quarter
 
-F_GENESIS = 0.25/100/2
+# TODO insert random injections of Luna supply!!
 GENESIS_LUNA_SUPPLY = 100
 
 GENESIS_LPE = 20
 
 # GBM parameters for TV
-MU_BOOM = 0.6
-MU_BUST = -0.5
+MU_BOOM = 0.5
+MU_BUST = -0.2
 SIGMA = 0.4
 CYCLE_LENGTHS = [2,3,5]
 
-# min and max values for f and w
-F_MIN = 0.001/2
-F_MAX = 0.02/2
+# fee parameters
+F_GENESIS = 0.1/100
+F_MIN = 0.05/100
+F_MAX = 1/100
+F_MAX_STEP = 0.025/100
 
+# buyback weight parameters
 # set in the main function
 # W_MAX is set to 1 - FIAT_RATIO
 # W_MIN is the lesser of W_MIN_CAP and W_MAX
 FIAT_RATIO = None
-W_MIN_CAP = 0.05
+W_MIN_CAP = 5/100
 W_MIN = None
 W_MAX = None
 W_GENESIS = None
+W_MAX_STEP = 2.5/100
 
-# max changes in f and w in any given period
-F_MAX_STEP = 0.0005/2
-W_MAX_STEP = 0.01
-
+MRL_GROWTH_FACTOR = 1.075
 MRL_INC = 10**(-6)
 SMR_TARGET = 0.75
 
