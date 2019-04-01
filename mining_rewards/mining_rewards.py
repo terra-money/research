@@ -342,25 +342,24 @@ def debt_control(df, t):
 
 def opt_control(df, t):
 	f, w = df.at[t,'f'], df.at[t,'w']
-	fmrl_ma1 = (df['f']*df['TV']/df['LS']).rolling(4, min_periods=1).mean().at[t]
-	fmrl_ma2 = (df['f']*df['TV']/df['LS']).rolling(52, min_periods=1).mean().at[t]
 
-	next_f = f*(fmrl_ma2 + MRL_INC)/fmrl_ma1
+	# fee update
+	MRL_short = (df['f']*df['TV']/df['LS']).rolling(4, min_periods=1).mean().at[t]
+	MRL_long = (df['f']*df['TV']/df['LS']).rolling(52, min_periods=1).mean().at[t]
+	next_f = f*MRL_long*MRL_GROWTH_FACTOR/MRL_short
+
+	# buyback weight update
+	buybacks_rolling_sum = (df['w']*df['S']).rolling(4, min_periods=1).sum().at[t]
+	fees_rolling_sum = (df['f']*df['TV']).rolling(4, min_periods=1).sum().at[t]
+	seigniorage_burden = buybacks_rolling_sum/(buybacks_rolling_sum + fees_rolling_sum)
+	if seigniorage_burden > 0:
+		next_w = w*SB_TARGET/seigniorage_burden
+	else:
+		next_w = W_MAX # no buybacks, so set next_w to max
+
+	# apply constraints
 	next_f = clamp(next_f, f - F_MAX_STEP, f + F_MAX_STEP)
 	next_f = clamp(next_f, F_MIN, F_MAX)
-
-	rolling_fees = (df['f']*df['TV']).rolling(13, min_periods=1).sum().at[t]
-	rolling_mr = (df['f']*df['TV'] + df['w']*df['S']).rolling(13, min_periods=1).sum().at[t]
-	fmr_rolling = rolling_fees/rolling_mr # cumulative fee to MR ratio, rolling quarterly
-	smr_rolling = 1 - fmr_rolling
-
-	# deal with edge cases where either smr_rolling or SMR_TARGET is 0
-	if smr_rolling > 0:
-		next_w = w*SMR_TARGET/smr_rolling
-	elif SMR_TARGET > 0:
-		next_w = W_MAX
-	else:
-		next_w = W_MIN
 	next_w = clamp(next_w, w - W_MAX_STEP, w + W_MAX_STEP)
 	next_w = clamp(next_w, W_MIN, W_MAX)
 
