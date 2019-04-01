@@ -137,7 +137,7 @@ W_MAX_STEP = 2.5/100
 
 MRL_GROWTH_FACTOR = 1.075
 MRL_INC = 10**(-6)
-SMR_TARGET = 0.75
+SB_TARGET = 0.67
 
 
 def plot_results(df):
@@ -169,11 +169,6 @@ def plot_results(df):
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Mining Rewards ($)')
 	#ax.right_ax.set_ylabel('Mining Rewards per Luna ($)')
-
-	# plot FMRL
-	ax = df.loc[:, ['FMRL_MA4', 'FMRL_MA52']].plot()
-	ax.set_xlabel('time (weeks)')
-	ax.set_ylabel('Mining Rewards per Luna ($)')
 
 	# plot MRL
 	ax = df.loc[:, ['MRL_MA13', 'MRL_MA52']].plot()
@@ -216,10 +211,11 @@ def plot_results(df):
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Luna Reserve Ratio')
 
-	# plot FMR
-	ax = df.loc[:, ['FMR']].plot(kind='area')
+	# plot SB
+	ax = df.loc[:, ['SB']].plot(kind='area')
 	ax.set_xlabel('time (weeks)')
-	ax.set_ylabel('Fee to Mining Reward Ratio')
+	ax.set_ylabel('Seigniorage Burden')
+	ax.set_ylim(0, 1)
 
 	plt.show()
 
@@ -417,16 +413,14 @@ if __name__ == '__main__':
 	df['LRR'] = df['LMC']/df['M'] # Luna Reserve Ratio
 	df['LP'] = df['LMC']/df['LS'] # Luna Price
 
-	rolling_fees = (df['f']*df['TV']).rolling(52, min_periods=1).sum()
-	rolling_mr = (df['f']*df['TV'] + df['w']*df['S']).rolling(52, min_periods=1).sum()
-	df['FMR'] = rolling_fees/rolling_mr # cumulative fee to MR ratio, rolling quarterly
-
-	df['FMRL_MA4'] = (df['f']*df['TV']/df['LS']).rolling(4, min_periods=1).mean()
-	df['FMRL_MA52'] = (df['f']*df['TV']/df['LS']).rolling(52, min_periods=1).mean()
+	buybacks_rolling_sum = (df['w']*df['S']).rolling(52, min_periods=1).sum()
+	fees_rolling_sum = (df['f']*df['TV']).rolling(52, min_periods=1).sum()
+	df['SB'] = buybacks_rolling_sum/(buybacks_rolling_sum + fees_rolling_sum)
 
 	df['TV_MA'] = df['TV'].rolling(52, min_periods=1).mean()
 	df['MR_MA1'] = df['MR'].rolling(52, min_periods=1).mean()
 	df['MR_MA2'] = df['MR'].rolling(104, min_periods=1).mean()
+	df['MRL_MA4'] = df['MRL'].rolling(4, min_periods=1).mean()
 	df['MRL_MA13'] = df['MRL'].rolling(13, min_periods=1).mean()
 	df['MRL_MA52'] = df['MRL'].rolling(52, min_periods=1).mean()
 	df['ΔM_MA'] = df['ΔM'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
@@ -438,7 +432,7 @@ if __name__ == '__main__':
 
 	print(df)
 
-	#df.loc[:, ['TV','M','LMC','f','w']].to_csv('mining_rewards_4.csv', index=False)
+	#df.loc[:, ['TV','M','LS','MR','MRL','MRL_MA4','MRL_MA52','SB','f','w']].to_csv('MR_data_1.csv')
 
 	plot_results(df)
 
