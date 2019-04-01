@@ -250,19 +250,13 @@ def tv_to_m(tv):
 	annual_tv = tv*PERIODS_PER_YEAR
 	return annual_tv/V
 
-# Mining Rewards to Luna Market Cap
-# TODO add randomness
-# TODO use MA rather than latest MR to smooth out
-# TODO** in the buyback setting we may need to include seigniorage in "earnings"!
-def mr_to_lmc(df, t):
-	#mr_ma = df['MR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean().at[t]
-	mr_ma = (df['f']*df['TV'] + df['w']*df['S']).rolling(13, min_periods=1).mean().at[t]
-	annualized_mr = mr_ma*PERIODS_PER_YEAR
+# Earnings to Luna Market Cap
+def earnings_to_lmc(df, t):
+	earnings_ma = (df['f']*df['TV'] + df['w']*df['S']).rolling(13, min_periods=1).mean().at[t]
+	annualized_earnings = earnings_ma*PERIODS_PER_YEAR
 	lpe = df.at[t,'LPE']
-	return annualized_mr*lpe
+	return annualized_earnings*lpe
 
-# nothing special going on here
-# separating to avoid lots of if-statements in state transition code
 def set_genesis_state(df):
 	tv = df.at[0,'TV']
 	df.at[0,'M'] = tv_to_m(tv)
@@ -272,7 +266,7 @@ def set_genesis_state(df):
 	df.at[0,'w'] = W_GENESIS
 	df.at[0,'MR'] = df.at[0,'f']*df.at[0,'TV'] # seigniorage not defined at genesis
 	df.at[0,'LPE'] = GENESIS_LPE
-	df.at[0,'LMC'] = mr_to_lmc(df, 0)
+	df.at[0,'LMC'] = earnings_to_lmc(df, 0)
 	df.at[0,'LS'] = GENESIS_LUNA_SUPPLY
 	df.at[0,'MRL'] = df.at[0,'MR']/df.at[0,'LS']
 	# f and w are forward-computed for the following state
@@ -295,7 +289,7 @@ def evaluate_state(df, t, control_rule):
 	df.at[t,'S'] = max(delta_m, 0)
 	df.at[t,'MR'] = df.at[t,'f']*df.at[t,'TV']
 	df.at[t,'LPE'] = lpe(df, t)
-	df.at[t,'LMC'] = mr_to_lmc(df, t)
+	df.at[t,'LMC'] = earnings_to_lmc(df, t)
 
 	lp_prev = df.at[t-1,'LMC']/df.at[t-1,'LS'] # previous Luna price
 
