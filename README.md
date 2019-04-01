@@ -1,5 +1,5 @@
 # Terra Research
-![banner](docs/terra-research.png)
+![banner](./assets/terra-research.png)
 
 Codebase for Terra Research. Projects span all layers of the Terra stack: blockchain, stability, dApps, e-commerce and beyond.
 
