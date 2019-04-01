@@ -17,8 +17,8 @@ from utils.gbm import gbm, gbm_cyclical
 
 ---------------------------------------------------------------------------------
  Usage:																			|
- 	To run simulation using opt control rule: 									|
- 		python mining_rewards.py opt 											|
+ 	To run simulation using smooth control rule: 								|
+ 		python mining_rewards.py smooth 										|
 																				|
  	To run simulation using null control rule and fiat ratio of 50%:        	|
  		python mining_rewards.py null --fiat_ratio 0.5							|
@@ -342,7 +342,7 @@ def debt_control(df, t):
 
 	return (next_f, next_w)
 
-def opt_control(df, t):
+def smooth_control(df, t):
 	f, w = df.at[t,'f'], df.at[t,'w']
 
 	# fee update
@@ -370,7 +370,7 @@ def opt_control(df, t):
 if __name__ == '__main__':
 	# read control rule from the command line
 	parser = argparse.ArgumentParser()
-	parser.add_argument('control_rule', type=str, choices=['null', 'debt', 'opt'], help='mining rewards control rule')
+	parser.add_argument('control_rule', type=str, choices=['null', 'debt', 'smooth'], help='mining rewards control rule')
 	parser.add_argument('-f', '--fiat_ratio', type=float, default=0, dest='fiat_ratio', help='fiat ratio between 0 and 1')
 	args = parser.parse_args()
 	if args.fiat_ratio < 0 or args.fiat_ratio > 1:
