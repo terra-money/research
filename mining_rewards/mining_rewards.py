@@ -107,8 +107,6 @@ PERIOD = 7 # in days
 PERIODS_PER_YEAR = int(364/PERIOD)
 NUM_PERIODS = int(TOTAL_DAYS/PERIOD)
 
-PERIODS_PER_WINDOW = 13 # 13-week windows, ie 1 fiscal quarter
-
 # TODO insert random injections of Luna supply!!
 GENESIS_LUNA_SUPPLY = 100
 
@@ -422,12 +420,12 @@ if __name__ == '__main__':
 	df['MRL_MA4'] = df['MRL'].rolling(4, min_periods=1).mean()
 	df['MRL_MA13'] = df['MRL'].rolling(13, min_periods=1).mean()
 	df['MRL_MA52'] = df['MRL'].rolling(52, min_periods=1).mean()
-	df['ΔM_MA'] = df['ΔM'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
-	df['LRR_MA'] = df['LRR'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
-	df['LP_MA'] = df['LP'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
+	df['ΔM_MA'] = df['ΔM'].rolling(13, min_periods=1).mean()
+	df['LRR_MA'] = df['LRR'].rolling(13, min_periods=1).mean()
+	df['LP_MA'] = df['LP'].rolling(13, min_periods=1).mean()
 
-	df['f_MA'] = df['f'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
-	df['w_MA'] = df['w'].rolling(PERIODS_PER_WINDOW, min_periods=1).mean()
+	df['f_MA'] = df['f'].rolling(13, min_periods=1).mean()
+	df['w_MA'] = df['w'].rolling(13, min_periods=1).mean()
 
 	print(df)
 
