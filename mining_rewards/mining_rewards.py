@@ -27,15 +27,8 @@ from utils.gbm import gbm, gbm_cyclical
  		python mining_rewards.py -h 											|
 ---------------------------------------------------------------------------------
 
-Our core objective in designing Terra's stability mechanism is to contain volatility in Luna price changes.
-
-Mining Rewards
-Luna receives compensation for mining in the form of rewards. Rewards come in two forms:
-- transaction fees: f(t)
-- a portion of seigniorage: w(t)
-
-Miining Rewards MR during period t are
-MR(t) = f(t)*TV(t) + w(t)*max{ΔM(t),0}, where TV and M are Transaction Volume and Terra Money Supply respectively.
+Our core objective in designing Terra's stability mechanism is to contain volatility in Luna price changes
+while permitting natural growth over time.
 
 Pricing Luna
 Luna has variable supply, so pricing one unit of Luna today is not as simple as discounting future rewards.
@@ -46,7 +39,7 @@ We can formulate the price of 1 Luna today using DCF as follows:
 SUM for all t from now to infinity: Total Rewards(t)/Luna Supply(t)/(1+r)^t for an appropriate discount rate r.
 
 The main benefit of this formulation is that it captures the idea that "the market prices in future dilution",
-in the sense that given a projection of Luna Supply in the future they can soundly price 1 Luna today.
+in the sense that given a projection of Luna Supply in the future it can soundly price 1 Luna today.
 
 Luna Price Volatility
 Volatility in Luna price comes from volatility in future unit rewards, i.e. Total Rewards(t)/Luna Supply(t).
@@ -55,50 +48,59 @@ to decrease up to initial issuance; when the economy is shrinking rewards decrea
 as a result of the Terra contraction mechanism. Hence one way to contain Luna price volatility is to contain
 volatility in unit rewards.
 
-Countercyclical Mining Rewards
-Our objective is to contain volatility in unit mining rewards, meaning Total Rewards(t)/Luna Supply(t). We have no
-control over Luna Supply (simplifying here -- we do via buybacks but we can incorporate in mining rewards without
-loss of generality). We *do* have control over Total Rewards.  The main intuition behind a countercyclical policy 
-is that it attempts to counteract economic cycles by increasing rewards when the economy is in recession and 
-decreasing rewards when the economy is growing.
+Targeting stable MRL growth
+Our objective is to contain volatility in unit mining rewards, meaning Total Rewards(t)/Luna Supply(t),
+which we call MRL for short. We also want to allow for growth, albeit gradual and stable. We have two levers 
+at our disposal to achieve this: transaction fees f(t), and the proportion of seigniorage that is allocated 
+towards Luna buybacks i.e. the buyback weight w(t). More precisely:
+- Miining Rewards during period t are f(t)*TV(t), where TV is Transaction Volume
+- Luna Buybacks during period t are w(t)*S(t), where S is Seigniorage (may be 0)
 
-We have two levers at our disposal to reduce volatility in mining rewards: transaction fees, and the proportion
-of seigniorage that gets allocated to mining rewards. In what follows we implement this basic idea: adjust the
-two levers to smooth out volatility in unit mining rewards.
+In what follows we implement this basic idea: adjust the two levers to achieve low-volatility growth in 
+unit mining rewards.
 
-Inputs
+Control Rules
+The control rule is the logic that adjusts f and w in response to economic conditions. It is the core
+building block of the algorithm. We have implemented three control rules:
+- null: no control at all -- f and w remain fixed at their genesis values
+- debt: control based on the amount of "Luna debt" accumulated -- the hihger Luna Supply above its genesis value 
+the higher f and w
+- smooth: control that targets smooth MRL growth -- details to be found in the README
 
-Parameters
-TV growth
-TV vol
-absorption/smoothing factor?
-
-Outputs
+--------------------------------------------------------------------------------------------------------------------
+Inputs (timeseries)
+TV: Transaction Volume (in Terra)
+--------------------------------------------------------------------------------------------------------------------
+Outputs (timeseries)
+f: Terra transaction fee (%)
+w: buyback weight (%)
+--------------------------------------------------------------------------------------------------------------------
+Core Parameters
+MRL_GROWTH_FACTOR: growth factor applied to MRL moving average
+SB_TARGET: Seigniorage Burden Target (%)
+MU_BOOM, MU_BUST: drift parameters for TV GBM
+SIGMA: volatility parameter for TV GBM
+V: Terra Velocity
+GENESIS_LPE: Luna P/E ratio at genesis
+--------------------------------------------------------------------------------------------------------------------
+State (at time t)
+t: week (0 to 519 ie 10 years)
+TV: Transaction Volume (in Terra)
+M: Terra Money Supply
+S: Seigniorage >= 0 generated during this period
+LMC: Luna Market Capitalization (in Terra)
+LS: Luna Supply
+LP: Luna Price
+LPE: Luna P/E ratio
+f: Terra transaction fee (%)
+w: buyback weight (%)
+MR: Mining Rewards from transaction fees, ie f*TV
+MRL: Mining Rewards per Luna, ie MR/LS
+--------------------------------------------------------------------------------------------------------------------
 """
 
-# TODO briefly explain divs vs buybacks and how they differ in the code
-# TODO develop clearer terminology, MR has become confusing
 
-# State
-# t representing week (0 to 52*10-1): 10 years
-# TV
-# TMCAP
-# seigniorage
-# LMCAP
-# L Supply
-# L price
-# f fees
-# w weight
-# MR mining rewards
-# a bunch of moving averages?
-
-# Parameters and Constants
-# TV growth
-# TV vol
-# velocity (26)
-# Luna P/E ratio (random walk in range 1 to 200?)
-
-V = 26*2 # annual Terra velocity
+V = 52 # annual Terra velocity
 NUM_YEARS = 10
 TOTAL_DAYS = NUM_YEARS*364
 PERIOD = 7 # in days
@@ -405,8 +407,6 @@ if __name__ == '__main__':
 		evaluate_state(df, t, control_rule)
 
 	# compute some extra columns
-
-	# TODO plot fee to seigniorage revenue ratio -- do we want to smooth this out?
 	df['ΔM'] = df['M'] - df['M'].shift(1) # changes in M
 	df['FRR'] = df['fiat']/df['M'] # Fiat Reserve Ratio
 	df['LRR'] = df['LMC']/df['M'] # Luna Reserve Ratio
