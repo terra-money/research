@@ -6,7 +6,7 @@ We implement, simulate and stress-test Terra's mining rewards mechanism.
 **The main objective of the mechanism is to ensure that Mining Rewards per Luna (MRL) experiences stable growth over time.** MRL is important because it tells us how much I will be compensated over time if I stake 1 Luna today, which is the main determinant of Luna's price. We want Luna's price to be relatively stable, and so we target smoothly increasing MRL to achieve this.
 
 ### What do we mean by stable growth in MRL?
-The simplest and most robust way of defining stability is relative to the recent past (a moving average). We also express growth relative to the recent past. So we definite stable growth as follows: *MRL today should be its 1 year moving average x some growth factor.*
+The simplest and most robust way of defining stability is relative to the recent past (a moving average). We also express growth relative to the recent past. So we define stable growth as follows: *MRL today should be its 1 year moving average x some growth factor.*
 
 ### How do we achieve stable growth in MRL?
 MRL depends on two factors: total mining rewards, and the number of staked Luna. The mechanism attempts to control both to keep MRL on target:
