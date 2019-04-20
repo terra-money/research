@@ -109,14 +109,8 @@ NUM_PERIODS = int(TOTAL_DAYS/PERIOD)
 
 # TODO insert random injections of Luna supply!!
 GENESIS_LUNA_SUPPLY = 100
-
+GENESIS_TV = 1
 GENESIS_LPE = 20
-
-# GBM parameters for TV
-MU_BOOM = 0.5
-MU_BUST = -0.2
-SIGMA = 0.4
-CYCLE_LENGTHS = [2,3,5]
 
 # fee parameters
 F_GENESIS = 0.1/100
@@ -125,14 +119,11 @@ F_MAX = 1/100
 F_MAX_STEP = 0.025/100
 
 # buyback weight parameters
-# set in the main function
-# W_MAX is set to 1 - FIAT_RATIO
-# W_MIN is the lesser of W_MIN_CAP and W_MAX
-FIAT_RATIO = None
+FIAT_RATIO = 0
 W_MIN_CAP = 5/100
-W_MIN = None
-W_MAX = None
-W_GENESIS = None
+W_MIN = 5/100
+W_MAX = 1
+W_GENESIS = 5/100
 W_MAX_STEP = 2.5/100
 
 MRL_GROWTH_FACTOR = 1.075
@@ -223,6 +214,12 @@ def plot_results(df):
 	ax.set_ylim(0, 1)
 
 	plt.show()
+
+def tv_gbm_jump():
+	early_stage = gbm(1, mu=0.1, sigma=0.1, num_periods=52, increments_per_period=1) # first year: high growth, high vol
+	growth_stage = gbm_cyclical(early_stage[-1], mu_boom=0.5, mu_bust=-0.2, sigma=0.4, cycle_lengths=[2,3,4], increments_per_period=52)
+	assert len(early_stage) + len(growth_stage) == 520
+	return np.append(early_stage, growth_stage)
 
 """
 Stochastic P/E multiple for Luna at time t, LPE(t)
@@ -364,33 +361,23 @@ def smooth_control(df, t):
 
 	return (next_f, next_w)
 
-def simulate_tv_jump():
-	early_stage = gbm(1, mu=0.1, sigma=0.1, num_periods=52, increments_per_period=1) # first year: high growth, high vol
-	growth_stage = gbm_cyclical(early_stage[-1], mu_boom=MU_BOOM, mu_bust=MU_BUST, sigma=SIGMA, cycle_lengths=[2,3,4], increments_per_period=52)
-	assert len(early_stage) + len(growth_stage) == 520
-	return np.append(early_stage, growth_stage)
+"""
+Simulates mining rewards.
+Args:
+	mu_boom:
+	mu_bust:
+	sigma: GBM parameters for transaction volume (cyclical)
+	control_rule: 'null', 'debt' or 'smooth'
+	seed: random seed for simulation
+Returns:
+	Dataframe with one row per state of the simulation
+"""
+def simulate_mr(mu_boom, mu_bust, sigma, control_rule='smooth', seed=0):
+	np.random.seed(seed)
+	control_rule = globals()[control_rule + '_control']
 
-if __name__ == '__main__':
-	# read control rule from the command line
-	parser = argparse.ArgumentParser()
-	parser.add_argument('control_rule', type=str, choices=['null', 'debt', 'smooth'], help='mining rewards control rule')
-	parser.add_argument('-f', '--fiat_ratio', type=float, default=0, dest='fiat_ratio', help='fiat ratio between 0 and 1')
-	args = parser.parse_args()
-	if args.fiat_ratio < 0 or args.fiat_ratio > 1:
-		parser.error("fiat ratio needs to be between 0 and 1")
-	control_rule = globals()[args.control_rule + '_control']
-	FIAT_RATIO = args.fiat_ratio
-	W_MAX = 1 - FIAT_RATIO
-	W_MIN = min(W_MAX, W_MIN_CAP)
-	W_GENESIS = W_MIN
-
-	# seeds to learn from
-	# 0, 12, 2, 42, 119, 240
-
-	np.random.seed(240) # for consistent outputs while developing
 	t = range(0, NUM_PERIODS)
-	tv = gbm_cyclical(1, mu_boom=MU_BOOM, mu_bust=MU_BUST, sigma=SIGMA, cycle_lengths=CYCLE_LENGTHS, increments_per_period=52)
-	#tv = simulate_tv_jump()
+	tv = gbm_cyclical(GENESIS_TV, mu_boom, mu_bust, sigma, cycle_lengths=[2,3,5], increments_per_period=52)
 
 	df = pd.DataFrame(data = {'t': t, 'TV': tv})
 	df['M'] = np.NaN # Terra Money Supply
@@ -433,8 +420,22 @@ if __name__ == '__main__':
 	df['f_MA'] = df['f'].rolling(13, min_periods=1).mean()
 	df['w_MA'] = df['w'].rolling(13, min_periods=1).mean()
 
-	print(df)
+	return df
 
+if __name__ == '__main__':
+	parser = argparse.ArgumentParser()
+	parser.add_argument('control_rule', type=str, choices=['null', 'debt', 'smooth'], help='mining rewards control rule')
+	parser.add_argument('-f', '--fiat_ratio', type=float, default=0, dest='fiat_ratio', help='fiat ratio between 0 and 1')
+	args = parser.parse_args()
+	if args.fiat_ratio < 0 or args.fiat_ratio > 1:
+		parser.error("fiat ratio needs to be between 0 and 1")
+	FIAT_RATIO = args.fiat_ratio
+	W_MAX = 1 - FIAT_RATIO
+	W_MIN = min(W_MAX, W_MIN_CAP)
+	W_GENESIS = W_MIN
+
+	df = simulate_mr(mu_boom=0.5, mu_bust=-0.2, sigma=0.4, control_rule=args.control_rule)
+	print(df)
 	plot_results(df)
 
 
