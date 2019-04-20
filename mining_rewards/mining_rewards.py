@@ -257,7 +257,7 @@ def tv_to_m(tv):
 
 # Earnings to Luna Market Cap
 def earnings_to_lmc(df, t):
-	earnings_ma = (df['f']*df['TV'] + df['w']*df['S']).rolling(13, min_periods=1).mean().at[t]
+	earnings_ma = (df['f']*df['TV']).rolling(13, min_periods=1).mean().at[t]
 	annualized_earnings = earnings_ma*PERIODS_PER_YEAR
 	lpe = df.at[t,'LPE']
 	return annualized_earnings*lpe
@@ -435,12 +435,6 @@ if __name__ == '__main__':
 
 	print(df)
 
-	#df.loc[:, ['TV','M','LS','MR','MRL','MRL_MA4','MRL_MA52','SB','f','w']].to_csv('MR_data_1.csv')
-
 	plot_results(df)
 
-	# TODO compute and compare growth rates and vols of main variables eg TV, MRL, LP etc
-	# This could be an excellent and straightforward way to aggregate results from many simulations
-
-	# TODO plot rolling var between TV and MRL
 
