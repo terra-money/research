@@ -63,7 +63,7 @@ Control Rules
 The control rule is the logic that adjusts f and w in response to economic conditions. It is the core
 building block of the algorithm. We have implemented three control rules:
 - null: no control at all -- f and w remain fixed at their genesis values
-- debt: control based on the amount of "Luna debt" accumulated -- the hihger Luna Supply above its genesis value 
+- debt: control based on the amount of "Luna debt" accumulated -- the higher Luna Supply above its genesis value
 the higher f and w
 - smooth: control that targets smooth MRL growth -- details to be found in the README
 
@@ -142,9 +142,11 @@ SB_TARGET = 0.67
 
 def plot_results(df):
 	# plot TV
-	ax = df.loc[:, ['TV', 'TV_MA']].plot()
+	ax = df.loc[:, ['TV','TV_MA52']].plot()
 	ax.set_xlabel('time (weeks)')
-	ax.set_ylabel('Transaction Volume ($)')
+	ax.set_ylabel('transaction volume ($)')
+	ax.legend(['transaction volume','transaction volume (annual avg)'])
+
 
 	# plot ΔΜ
 	ax = df.loc[:, ['ΔM', 'ΔM_MA']].plot()
@@ -154,18 +156,20 @@ def plot_results(df):
 	# plot f and w
 	ax = df.loc[:, ['f', 'w']].plot(secondary_y=['w'])
 	ax.set_xlabel('time (weeks)')
-	ax.set_ylabel('Transaction Fee (%)')
-	ax.right_ax.set_ylabel('Seigniorage Weight (%)')
+	ax.set_ylabel('transaction fees (%)')
+	ax.right_ax.set_ylabel('Luna burn rate (%)')
 	ax.set_ylim(0, F_MAX)
 	ax.right_ax.set_ylim(0, 1)
 	y_ticks = ax.get_yticks()
 	ax.set_yticklabels(['{:,.2%}'.format(y) for y in y_ticks])
 	y_ticks_right = ax.right_ax.get_yticks()
 	ax.right_ax.set_yticklabels(['{:,.2%}'.format(y) for y in y_ticks_right])
+	lines = ax.get_lines() + ax.right_ax.get_lines()
+	ax.legend(lines, ['fees','Luna burn rate'])
 
 	# plot MR and MRL
 	#ax = df.loc[:, ['MR_MA', 'MRL_MA']].plot(secondary_y=['MRL_MA'])
-	ax = df.loc[:, ['MR_MA1', 'MR_MA2']].plot()
+	ax = df.loc[:, ['MR_MA13', 'MR_MA52']].plot()
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Mining Rewards ($)')
 	#ax.right_ax.set_ylabel('Mining Rewards per Luna ($)')
@@ -173,10 +177,11 @@ def plot_results(df):
 	# plot MRL
 	ax = df.loc[:, ['MRL_MA13', 'MRL_MA52']].plot()
 	ax.set_xlabel('time (weeks)')
-	ax.set_ylabel('Mining Rewards per Luna ($)')
+	ax.set_ylabel('unit mining rewards ($)')
+	ax.legend(['unit mining rewards (annual avg)'])
 
 	# plot LP
-	ax = df.loc[:, ['LP', 'LP_MA']].plot()
+	ax = df.loc[:, ['LP', 'LP_MA13']].plot()
 	ax.set_xlabel('time (weeks)')
 	ax.set_ylabel('Luna Price ($)')
 
@@ -235,8 +240,8 @@ We make it more volatile when TV is in a downtrend
 # TODO make LPE more responsive, 1 and 2 year MAs are too slow
 def lpe(df, t):
 	prev_lpe = df.at[t-1,'LPE']
-	tv_ma1 = df['TV'].rolling(PERIODS_PER_YEAR, min_periods=1).mean().at[t]
-	tv_ma2 = df['TV'].rolling(2*PERIODS_PER_YEAR, min_periods=1).mean().at[t]
+	tv_ma1 = df['TV'].rolling(13, min_periods=1).mean().at[t]
+	tv_ma2 = df['TV'].rolling(2*13, min_periods=1).mean().at[t]
 	tv_delta = tv_ma1/tv_ma2 - 1
 	mu = tv_delta/50
 	if tv_ma1 < tv_ma2:
@@ -359,6 +364,12 @@ def smooth_control(df, t):
 
 	return (next_f, next_w)
 
+def simulate_tv_jump():
+	early_stage = gbm(1, mu=0.1, sigma=0.1, num_periods=52, increments_per_period=1) # first year: high growth, high vol
+	growth_stage = gbm_cyclical(early_stage[-1], mu_boom=MU_BOOM, mu_bust=MU_BUST, sigma=SIGMA, cycle_lengths=[2,3,4], increments_per_period=52)
+	assert len(early_stage) + len(growth_stage) == 520
+	return np.append(early_stage, growth_stage)
+
 if __name__ == '__main__':
 	# read control rule from the command line
 	parser = argparse.ArgumentParser()
@@ -374,18 +385,19 @@ if __name__ == '__main__':
 	W_GENESIS = W_MIN
 
 	# seeds to learn from
-	# 0, 12, 2, 42, 119
+	# 0, 12, 2, 42, 119, 240
 
-	np.random.seed(0) # for consistent outputs while developing
+	np.random.seed(240) # for consistent outputs while developing
 	t = range(0, NUM_PERIODS)
 	tv = gbm_cyclical(1, mu_boom=MU_BOOM, mu_bust=MU_BUST, sigma=SIGMA, cycle_lengths=CYCLE_LENGTHS, increments_per_period=52)
+	#tv = simulate_tv_jump()
 
 	df = pd.DataFrame(data = {'t': t, 'TV': tv})
 	df['M'] = np.NaN # Terra Money Supply
 	df['fiat'] = np.NaN
 	df['S'] = np.NaN # seigniorage
 	df['f'] = np.NaN # TX fee
-	df['w'] = np.NaN # seigniorage weight
+	df['w'] = np.NaN # buyback weight
 	df['MR'] = np.NaN # Mining Rewards
 	df['LPE'] = np.NaN # Luna PE ratio
 	df['LMC'] = np.NaN # Luna Market Cap
@@ -408,15 +420,15 @@ if __name__ == '__main__':
 	fees_rolling_sum = (df['f']*df['TV']).rolling(52, min_periods=1).sum()
 	df['SB'] = buybacks_rolling_sum/(buybacks_rolling_sum + fees_rolling_sum)
 
-	df['TV_MA'] = df['TV'].rolling(52, min_periods=1).mean()
-	df['MR_MA1'] = df['MR'].rolling(52, min_periods=1).mean()
-	df['MR_MA2'] = df['MR'].rolling(104, min_periods=1).mean()
+	df['TV_MA52'] = df['TV'].rolling(52, min_periods=1).mean()
+	df['MR_MA13'] = df['MR'].rolling(13, min_periods=1).mean()
+	df['MR_MA52'] = df['MR'].rolling(52, min_periods=1).mean()
 	df['MRL_MA4'] = df['MRL'].rolling(4, min_periods=1).mean()
 	df['MRL_MA13'] = df['MRL'].rolling(13, min_periods=1).mean()
 	df['MRL_MA52'] = df['MRL'].rolling(52, min_periods=1).mean()
 	df['ΔM_MA'] = df['ΔM'].rolling(13, min_periods=1).mean()
 	df['LRR_MA'] = df['LRR'].rolling(13, min_periods=1).mean()
-	df['LP_MA'] = df['LP'].rolling(13, min_periods=1).mean()
+	df['LP_MA13'] = df['LP'].rolling(13, min_periods=1).mean()
 
 	df['f_MA'] = df['f'].rolling(13, min_periods=1).mean()
 	df['w_MA'] = df['w'].rolling(13, min_periods=1).mean()
